@@ -1,21 +1,23 @@
 {
-  "id": "nx-import-export",
-  "name": "NX Import Export",
-  "description": "コンテンツ、メディア、設定のインポート・エクスポート機能を追加します。",
-  "version": "1.0.0",
-  "bootstrap": "bootstrap.php",
-  "bundled": false,
-  "requires": {
-    "nexapress": "2.2.0",
-    "php": "8.0"
-  },
-  "update": {
-    "provider": "github",
-    "repository": "aki-sho/nx-import-export",
-    "asset": "nx-import-export-{version}.zip"
-  },
-  "admin": {
-    "menu_label": "インポート・エクスポート",
-    "dashboard": "admin/dashboard.php"
-  }
+    "id": "nx-import-export",
+    "name": "NX Import Export",
+    "description": "コンテンツ、メディア、設定のインポート・エクスポート機能を追加します。",
+    "version": "1.0.0",
+    "bootstrap": "bootstrap.php",
+    "bundled": true,
+    "icon_url": "https://raw.githubusercontent.com/aki-sho/nx-import-export/main/img.png",
+    "download_url": "https://github.com/aki-sho/nx-import-export/releases/download/v1.0.0/nx-import-export-1.0.0.zip",
+    "requires": {
+        "nexapress": "2.2.0",
+        "php": "8.0"
+    },
+    "update": {
+        "provider": "github",
+        "repository": "aki-sho/nx-import-export",
+        "asset": "nx-import-export-{version}.zip"
+    },
+    "admin": {
+        "menu_label": "インポート・エクスポート",
+        "dashboard": "admin/dashboard.php"
+    }
 }
