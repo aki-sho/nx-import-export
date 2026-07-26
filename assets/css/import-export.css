@@ -1,0 +1,394 @@
+/*
+ * NX Import Export
+ * 管理画面全体
+ */
+.nx-import-export {
+    width: 100%;
+    max-width: 1100px;
+}
+
+.nx-import-export,
+.nx-import-export * {
+    box-sizing: border-box;
+}
+
+/*
+ * 画面上部
+ */
+.nx-import-export-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 24px;
+}
+
+.nx-import-export-header h1 {
+    margin: 0 0 8px;
+    font-size: 28px;
+    line-height: 1.3;
+}
+
+.nx-import-export-header p {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.7;
+}
+
+.nx-import-export-version {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    padding: 6px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    background: #ffffff;
+    color: #475569;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/*
+ * 処理結果メッセージ
+ */
+.nx-import-export-notice {
+    margin-bottom: 20px;
+    padding: 14px 16px;
+    border: 1px solid;
+    border-radius: 8px;
+    line-height: 1.6;
+}
+
+.nx-import-export-notice.is-success {
+    border-color: #86efac;
+    background: #f0fdf4;
+    color: #166534;
+}
+
+.nx-import-export-notice.is-error {
+    border-color: #fca5a5;
+    background: #fef2f2;
+    color: #991b1b;
+}
+
+/*
+ * タブ
+ */
+.nx-import-export-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 0;
+    padding: 0 16px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.nx-import-export-tab {
+    position: relative;
+    appearance: none;
+    margin: 0;
+    padding: 13px 18px;
+    border: 0;
+    background: transparent;
+    color: #64748b;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.nx-import-export-tab:hover {
+    color: #0f172a;
+}
+
+.nx-import-export-tab:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+.nx-import-export-tab.is-active {
+    color: #0f172a;
+}
+
+.nx-import-export-tab.is-active::after {
+    position: absolute;
+    right: 8px;
+    bottom: -1px;
+    left: 8px;
+    height: 3px;
+    border-radius: 3px 3px 0 0;
+    background: currentColor;
+    content: "";
+}
+
+/*
+ * タブ内容
+ */
+.nx-import-export-panel {
+    display: none;
+    padding-top: 24px;
+}
+
+.nx-import-export-panel.is-active {
+    display: block;
+}
+
+/*
+ * メインカード
+ */
+.nx-import-export-card {
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 4%);
+}
+
+.nx-import-export-card-header {
+    padding: 22px 24px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.nx-import-export-card-header h2 {
+    margin: 0 0 6px;
+    font-size: 20px;
+    line-height: 1.4;
+}
+
+.nx-import-export-card-header p {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.7;
+}
+
+/*
+ * フォーム
+ */
+.nx-import-export-form {
+    padding: 24px;
+}
+
+.nx-import-export-form fieldset {
+    min-width: 0;
+    margin: 0 0 24px;
+    padding: 0;
+    border: 0;
+}
+
+.nx-import-export-form legend {
+    display: block;
+    width: 100%;
+    margin-bottom: 12px;
+    color: #0f172a;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.nx-import-export-field {
+    margin-bottom: 24px;
+}
+
+.nx-import-export-field > label {
+    display: block;
+    margin-bottom: 8px;
+    color: #0f172a;
+    font-weight: 700;
+}
+
+.nx-import-export-field input[type="file"] {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    border: 1px dashed #94a3b8;
+    border-radius: 8px;
+    background: #f8fafc;
+}
+
+.nx-import-export-field input[type="file"]:focus {
+    border-style: solid;
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+}
+
+.nx-import-export-help {
+    margin: 8px 0 0;
+    color: #64748b;
+    font-size: 13px;
+}
+
+/*
+ * 処理モード選択
+ */
+.nx-import-export-modes {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.nx-import-export-mode {
+    position: relative;
+    display: block;
+    cursor: pointer;
+}
+
+.nx-import-export-mode input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.nx-import-export-mode-content {
+    display: flex;
+    min-height: 116px;
+    flex-direction: column;
+    gap: 8px;
+    padding: 16px;
+    border: 2px solid #e2e8f0;
+    border-radius: 9px;
+    background: #ffffff;
+    transition:
+        border-color 0.15s ease,
+        background-color 0.15s ease,
+        box-shadow 0.15s ease;
+}
+
+.nx-import-export-mode-content strong {
+    color: #0f172a;
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+.nx-import-export-mode-content span {
+    color: #64748b;
+    font-size: 13px;
+    line-height: 1.7;
+}
+
+.nx-import-export-mode:hover
+.nx-import-export-mode-content {
+    border-color: #94a3b8;
+}
+
+.nx-import-export-mode input:checked
++ .nx-import-export-mode-content {
+    border-color: #334155;
+    background: #f8fafc;
+    box-shadow: 0 0 0 1px #334155;
+}
+
+.nx-import-export-mode input:focus-visible
++ .nx-import-export-mode-content {
+    outline: 2px solid currentColor;
+    outline-offset: 3px;
+}
+
+/*
+ * 注意表示
+ */
+.nx-import-export-warning {
+    margin-bottom: 24px;
+    padding: 14px 16px;
+    border: 1px solid #fde68a;
+    border-radius: 8px;
+    background: #fffbeb;
+    color: #78350f;
+}
+
+.nx-import-export-warning strong {
+    display: block;
+    margin-bottom: 4px;
+}
+
+.nx-import-export-warning p {
+    margin: 0;
+    line-height: 1.7;
+}
+
+/*
+ * 実行ボタン
+ */
+.nx-import-export-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-top: 20px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.nx-import-export-actions .button {
+    min-height: 42px;
+    padding: 9px 18px;
+    border: 1px solid #0f172a;
+    border-radius: 7px;
+    background: #0f172a;
+    color: #ffffff;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.nx-import-export-actions .button:hover {
+    opacity: 0.9;
+}
+
+.nx-import-export-actions .button:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 3px;
+}
+
+.nx-import-export-actions .button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/*
+ * タブレット表示
+ */
+@media (max-width: 900px) {
+    .nx-import-export-modes {
+        grid-template-columns: 1fr;
+    }
+
+    .nx-import-export-mode-content {
+        min-height: auto;
+    }
+}
+
+/*
+ * スマートフォン表示
+ */
+@media (max-width: 640px) {
+    .nx-import-export-header {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .nx-import-export-header h1 {
+        font-size: 24px;
+    }
+
+    .nx-import-export-tabs {
+        overflow-x: auto;
+        padding: 0;
+    }
+
+    .nx-import-export-tab {
+        flex: 1 0 auto;
+    }
+
+    .nx-import-export-card-header,
+    .nx-import-export-form {
+        padding: 18px;
+    }
+
+    .nx-import-export-actions {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .nx-import-export-actions .button {
+        width: 100%;
+    }
+}

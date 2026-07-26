@@ -1,0 +1,21 @@
+{
+  "id": "nx-import-export",
+  "name": "NX Import Export",
+  "description": "コンテンツ、メディア、設定のインポート・エクスポート機能を追加します。",
+  "version": "1.0.0",
+  "bootstrap": "bootstrap.php",
+  "bundled": false,
+  "requires": {
+    "nexapress": "2.2.0",
+    "php": "8.0"
+  },
+  "update": {
+    "provider": "github",
+    "repository": "aki-sho/nx-import-export",
+    "asset": "nx-import-export-{version}.zip"
+  },
+  "admin": {
+    "menu_label": "インポート・エクスポート",
+    "dashboard": "admin/dashboard.php"
+  }
+}
