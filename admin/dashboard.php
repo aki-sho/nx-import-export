@@ -1,6 +1,10 @@
 <?php
 
 use NexaPressImportExport\Admin\Notice;
+use app\Core\Auth;
+use app\Core\Permission;
+use NexaPressImportExport\Import\BackupService;
+use NexaPressImportExport\Import\PreviewStore;
 
 /*
  * 拡張機能以外から直接実行された場合は終了
@@ -8,6 +12,25 @@ use NexaPressImportExport\Admin\Notice;
 if (!defined('NX_IMPORT_EXPORT_PATH')) {
     return;
 }
+
+Permission::require('extensions.manage');
+$preview = null;
+$backups = [];
+$managementError = '';
+$userId = (int)(Auth::user()['id'] ?? 0);
+$activeTab = ($_SESSION['nx_import_export_active_tab'] ?? '') === 'import' ? 'import' : 'export';
+unset($_SESSION['nx_import_export_active_tab']);
+if (isset($_SESSION['nx_import_export_preview'])) {
+    try {
+        $preview = (new PreviewStore())->get((string)$_SESSION['nx_import_export_preview'], $userId);
+        $activeTab = 'import';
+    } catch (Throwable $exception) {
+        unset($_SESSION['nx_import_export_preview']);
+        $managementError = '確認用データを読み込めません。再度アップロードしてプレビューしてください。';
+    }
+}
+try { $backups = (new BackupService())->listForUser($userId); }
+catch (Throwable $exception) { $managementError = 'バックアップ履歴を読み込めません。保存先の権限を確認してください。'; }
 
 /*
  * 処理モードを取得
@@ -79,7 +102,7 @@ if (is_file($cssFile)) {
             <?= e(
                 (string)(
                     $extensionInfo['version']
-                    ?? '1.0.0'
+                    ?? '1.1.0'
                 )
             ) ?>
         </span>
@@ -101,7 +124,7 @@ if (is_file($cssFile)) {
     >
         <button
             type="button"
-            class="nx-import-export-tab is-active"
+            class="nx-import-export-tab<?= $activeTab === 'export' ? ' is-active' : '' ?>"
             data-nx-import-export-tab="export"
         >
             エクスポート
@@ -109,7 +132,7 @@ if (is_file($cssFile)) {
 
         <button
             type="button"
-            class="nx-import-export-tab"
+            class="nx-import-export-tab<?= $activeTab === 'import' ? ' is-active' : '' ?>"
             data-nx-import-export-tab="import"
         >
             インポート
@@ -118,7 +141,7 @@ if (is_file($cssFile)) {
 
     <div class="nx-import-export-panels">
         <section
-            class="nx-import-export-panel is-active"
+            class="nx-import-export-panel<?= $activeTab === 'export' ? ' is-active' : '' ?>"
             data-nx-import-export-panel="export"
         >
             <?php
@@ -135,7 +158,7 @@ if (is_file($cssFile)) {
         </section>
 
         <section
-            class="nx-import-export-panel"
+            class="nx-import-export-panel<?= $activeTab === 'import' ? ' is-active' : '' ?>"
             data-nx-import-export-panel="import"
         >
             <?php

@@ -187,36 +187,34 @@
         );
     }
 
-    /*
-     * インポート実行前の確認
-     */
-    const importPanel =
-        root.querySelector(
-            '[data-nx-import-export-panel="import"]'
-        );
-
-    const importForm =
-        importPanel
-            ? importPanel.querySelector(
-                "form"
-            )
-            : null;
-
-    if (importForm) {
-        importForm.addEventListener(
-            "submit",
-            (event) => {
-                const confirmed =
-                    window.confirm(
-                        "インポートを実行します。\n"
-                        + "既存データが更新される場合があります。"
-                    );
-
-                if (!confirmed) {
-                    event.preventDefault();
-                }
+    // データを変更するフォームだけ、実行直前の確認を行う。
+    root.querySelectorAll("form[data-confirm]").forEach((form) => {
+        form.addEventListener("submit", (event) => {
+            if (!window.confirm(form.dataset.confirm)) {
+                event.preventDefault();
             }
-        );
+        });
+    });
+
+    const importUpload = root.querySelector('form[action$="/preview"]');
+    if (importUpload) {
+        const updateOptions = () => {
+            const mode = importUpload.querySelector('input[name="mode"]:checked')?.value;
+            const contentOptions = importUpload.querySelector("[data-nx-content-options]");
+            const debugOption = importUpload.querySelector("[data-nx-debug-option]");
+            if (contentOptions) {
+                contentOptions.hidden = mode === "settings";
+                contentOptions.disabled = mode === "settings";
+            }
+            if (debugOption) {
+                debugOption.hidden = mode !== "settings";
+                debugOption.querySelector("input").disabled = mode !== "settings";
+            }
+        };
+        importUpload.querySelectorAll('input[name="mode"]').forEach((input) => {
+            input.addEventListener("change", updateOptions);
+        });
+        updateOptions();
     }
 
     /*
@@ -226,7 +224,8 @@
         (form) => {
             form.addEventListener(
                 "submit",
-                () => {
+                (event) => {
+                    if (event.defaultPrevented) { return; }
                     const submitButton =
                         form.querySelector(
                             'button[type="submit"]'

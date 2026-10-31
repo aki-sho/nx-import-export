@@ -39,7 +39,14 @@ class SettingsRepository
     public function save(
         array $settings
     ): int {
-        $savedCount = 0;
+        $validated = $this->validate($settings);
+        foreach ($validated as $section => $values) { $this->write($section, $values); }
+        return count($validated);
+    }
+
+    public function validate(array $settings): array
+    {
+        $validated = [];
 
         if (
             isset($settings['general']) &&
@@ -47,14 +54,9 @@ class SettingsRepository
                 $settings['general']
             )
         ) {
-            $this->write(
-                'general',
-                $this->sanitizeGeneral(
-                    $settings['general']
-                )
+            $validated['general'] = $this->sanitizeGeneral(
+                $settings['general']
             );
-
-            $savedCount++;
         }
 
         if (
@@ -63,14 +65,9 @@ class SettingsRepository
                 $settings['url']
             )
         ) {
-            $this->write(
-                'url',
-                $this->sanitizeUrl(
-                    $settings['url']
-                )
+            $validated['url'] = $this->sanitizeUrl(
+                $settings['url']
             );
-
-            $savedCount++;
         }
 
         if (
@@ -79,23 +76,18 @@ class SettingsRepository
                 $settings['debug']
             )
         ) {
-            $this->write(
-                'debug',
-                $this->sanitizeDebug(
-                    $settings['debug']
-                )
+            $validated['debug'] = $this->sanitizeDebug(
+                $settings['debug']
             );
-
-            $savedCount++;
         }
 
-        if ($savedCount === 0) {
+        if ($validated === []) {
             throw new RuntimeException(
                 '保存できる設定がありません。'
             );
         }
 
-        return $savedCount;
+        return $validated;
     }
 
     /*
@@ -270,12 +262,16 @@ class SettingsRepository
     private function sanitizeDebug(
         array $settings
     ): array {
+        if (
+            !array_key_exists('enabled', $settings) ||
+            !is_bool($settings['enabled'])
+        ) {
+            throw new RuntimeException('デバッグ設定のenabledにはtrueまたはfalseを指定してください。');
+        }
+
         return [
             'enabled' =>
-                (bool)(
-                    $settings['enabled']
-                    ?? false
-                ),
+                $settings['enabled'],
         ];
     }
 

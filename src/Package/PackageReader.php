@@ -20,6 +20,8 @@ class PackageReader
     ): array {
         $limits = $this->limits();
 
+        TempDirectory::cleanup((int)($limits['temporary_file_lifetime'] ?? 3600));
+
         $temporaryDirectory =
             TempDirectory::create();
 
@@ -29,31 +31,23 @@ class PackageReader
                 ?? 5000
             );
 
-            $maxPackageSize = (int)(
-                $limits['max_package_size']
-                ?? 104857600
-            );
-
-            /*
-             * 圧縮後100MBの場合、
-             * 展開後は最大500MBまで許可
-             */
-            $maxExtractedSize =
-                max(
-                    $maxPackageSize * 5,
-                    524288000
-                );
-
-            $entries = Zip::extractSafe(
-                $zipPath,
-                $temporaryDirectory,
-                $maxEntries,
-                $maxExtractedSize
+            $maxExtractedSize = (int)(
+                $limits['max_extracted_size']
+                ?? 524288000
             );
 
             $maxJsonSize = (int)(
                 $limits['max_json_size']
                 ?? 20971520
+            );
+
+            $entries = Zip::extractSafe(
+                $zipPath,
+                $temporaryDirectory,
+                $maxEntries,
+                $maxExtractedSize,
+                (int)($limits['max_media_file_size'] ?? 52428800),
+                $maxJsonSize
             );
 
             $manifestFile =

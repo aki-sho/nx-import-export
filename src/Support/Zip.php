@@ -152,8 +152,14 @@ class Zip
         string $zipPath,
         string $destination,
         int $maxEntries = 5000,
-        int $maxTotalSize = 524288000
+        int $maxTotalSize = 524288000,
+        int $maxFileSize = 52428800,
+        int $maxJsonSize = 20971520
     ): array {
+        if (min($maxEntries, $maxTotalSize, $maxFileSize, $maxJsonSize) <= 0) {
+            throw new RuntimeException('ZIPの容量・件数制限が正しくありません。');
+        }
+
         $zip = self::open(
             $zipPath
         );
@@ -191,6 +197,8 @@ class Zip
 
             $entries = [];
             $totalSize = 0;
+            $files = [];
+            $seen = [];
 
             for (
                 $index = 0;
@@ -215,13 +223,30 @@ class Zip
                     $stat['size'] ?? 0
                 );
 
-                $totalSize += $entrySize;
+                $isDirectory = str_ends_with((string)$stat['name'], '/');
+                $entryLimit = str_ends_with(strtolower($entryName), '.json')
+                    ? $maxJsonSize
+                    : $maxFileSize;
+                $key = strtolower($entryName);
 
-                if ($totalSize > $maxTotalSize) {
+                if (isset($seen[$key])) {
+                    throw new RuntimeException('ZIP内に重複したパスがあります。');
+                }
+
+                $seen[$key] = true;
+
+                if (
+                    $entrySize < 0 ||
+                    $entrySize > $entryLimit ||
+                    $entrySize > $maxTotalSize - $totalSize ||
+                    ($isDirectory && $entrySize !== 0)
+                ) {
                     throw new RuntimeException(
                         'ZIP展開後の容量が制限を超えています。'
                     );
                 }
+
+                $totalSize += $entrySize;
 
                 /*
                  * シンボリックリンクを拒否
@@ -247,61 +272,35 @@ class Zip
                     }
                 }
 
-                $targetPath =
-                    $basePath
-                    . DIRECTORY_SEPARATOR
-                    . str_replace(
-                        '/',
-                        DIRECTORY_SEPARATOR,
-                        $entryName
-                    );
+                $files[] = [
+                    'name' => (string)$stat['name'],
+                    'path' => $entryName,
+                    'size' => $entrySize,
+                    'limit' => $entryLimit,
+                    'directory' => $isDirectory,
+                ];
+            }
+
+            /*
+             * 全エントリーの検査後に展開し、実際に読み出した量も制限する。
+             */
+            $actualTotalSize = 0;
+
+            foreach ($files as $file) {
+                $entryName = $file['path'];
 
                 /*
                  * フォルダを作成
                  */
-                if (
-                    str_ends_with(
-                        (string)($stat['name'] ?? ''),
-                        '/'
-                    )
-                ) {
-                    if (
-                        !is_dir($targetPath) &&
-                        !mkdir(
-                            $targetPath,
-                            0755,
-                            true
-                        ) &&
-                        !is_dir($targetPath)
-                    ) {
-                        throw new RuntimeException(
-                            'ZIP内のフォルダを作成できませんでした。'
-                        );
-                    }
-
+                if ($file['directory']) {
+                    SafePath::directory($basePath, $entryName);
                     continue;
                 }
 
-                $parentDirectory = dirname(
-                    $targetPath
-                );
-
-                if (
-                    !is_dir($parentDirectory) &&
-                    !mkdir(
-                        $parentDirectory,
-                        0755,
-                        true
-                    ) &&
-                    !is_dir($parentDirectory)
-                ) {
-                    throw new RuntimeException(
-                        'ZIP展開先のフォルダを作成できませんでした。'
-                    );
-                }
+                $targetPath = SafePath::file($basePath, $entryName);
 
                 $input = $zip->getStream(
-                    (string)($stat['name'] ?? '')
+                    $file['name']
                 );
 
                 if ($input === false) {
@@ -312,7 +311,7 @@ class Zip
 
                 $output = fopen(
                     $targetPath,
-                    'wb'
+                    'xb'
                 );
 
                 if ($output === false) {
@@ -323,20 +322,26 @@ class Zip
                     );
                 }
 
-                $copied = stream_copy_to_stream(
-                    $input,
-                    $output
-                );
+                try {
+                    $copied = self::copyBounded(
+                        $input,
+                        $output,
+                        min($file['size'], $file['limit'], $maxTotalSize - $actualTotalSize)
+                    );
+
+                    if ($copied !== $file['size']) {
+                        throw new RuntimeException('ZIP内の申告容量と実際の容量が一致しません。');
+                    }
+                } catch (\Throwable $exception) {
+                    fclose($input);
+                    fclose($output);
+                    unlink($targetPath);
+                    throw $exception;
+                }
 
                 fclose($input);
                 fclose($output);
-
-                if ($copied === false) {
-                    throw new RuntimeException(
-                        'ZIP内のファイルを展開できませんでした。'
-                    );
-                }
-
+                $actualTotalSize += $copied;
                 $entries[] = $entryName;
             }
 
@@ -344,6 +349,44 @@ class Zip
         } finally {
             $zip->close();
         }
+    }
+
+    /*
+     * 上限を超えるデータは保存しない。申告容量が偽装されたZIPも拒否する。
+     */
+    private static function copyBounded($input, $output, int $limit): int
+    {
+        $copied = 0;
+
+        while (!feof($input)) {
+            $chunk = fread($input, min(65536, $limit - $copied + 1));
+
+            if ($chunk === false || ($chunk === '' && !feof($input))) {
+                throw new RuntimeException('ZIP内のファイルを読み込めませんでした。');
+            }
+
+            $length = strlen($chunk);
+
+            if ($length > $limit - $copied) {
+                throw new RuntimeException('ZIP展開後の実測容量が制限を超えています。');
+            }
+
+            $offset = 0;
+
+            while ($offset < $length) {
+                $written = fwrite($output, substr($chunk, $offset));
+
+                if ($written === false || $written === 0) {
+                    throw new RuntimeException('ZIP内のファイルを保存できませんでした。');
+                }
+
+                $offset += $written;
+            }
+
+            $copied += $length;
+        }
+
+        return $copied;
     }
 
     /*
@@ -378,7 +421,10 @@ class Zip
             if (
                 $part === '' ||
                 $part === '.' ||
-                $part === '..'
+                $part === '..' ||
+                preg_match('/[<>:"|?*\x00-\x1F\x7F]/', $part) ||
+                preg_match('/[. ]$/', $part) ||
+                preg_match('/^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i', $part)
             ) {
                 throw new RuntimeException(
                     'ZIP内のファイルパスが正しくありません。'

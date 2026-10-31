@@ -36,11 +36,13 @@ class Json
     public static function decode(
         string $json
     ): array {
+        self::validateComplexity($json);
+
         try {
             $data = json_decode(
                 $json,
                 true,
-                512,
+                64,
                 JSON_THROW_ON_ERROR
             );
         } catch (JsonException $exception) {
@@ -58,6 +60,41 @@ class Json
         }
 
         return $data;
+    }
+
+    /*
+     * 小さいJSONでも大量の配列・要素を生成してメモリを消費しないよう、
+     * デコード前に構造要素数を制限する。文字列内の記号は数えない。
+     */
+    private static function validateComplexity(string $json): void
+    {
+        $length = strlen($json);
+        $nodes = 0;
+
+        for ($index = 0; $index < $length; $index++) {
+            $character = $json[$index];
+
+            if ($character === '"') {
+                while (++$index < $length) {
+                    $index += strcspn($json, '"\\', $index);
+
+                    if ($index >= $length || $json[$index] === '"') {
+                        break;
+                    }
+
+                    // エスケープされた次の1文字も読み飛ばす。
+                    $index++;
+                }
+            } elseif (
+                $character === '{' ||
+                $character === '[' ||
+                $character === ','
+            ) {
+                if (++$nodes > 200000) {
+                    throw new RuntimeException('JSONの構造要素数が制限を超えています。');
+                }
+            }
+        }
     }
 
     /*

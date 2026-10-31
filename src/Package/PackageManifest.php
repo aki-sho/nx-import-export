@@ -61,7 +61,7 @@ class PackageManifest
                 'NX_IMPORT_EXPORT_PATH'
             )
         ) {
-            return '1.0.0';
+            return '1.1.0';
         }
 
         $manifestFile =
@@ -69,7 +69,7 @@ class PackageManifest
             . '/manifest.json';
 
         if (!is_file($manifestFile)) {
-            return '1.0.0';
+            return '1.1.0';
         }
 
         $json = file_get_contents(
@@ -77,7 +77,7 @@ class PackageManifest
         );
 
         if ($json === false) {
-            return '1.0.0';
+            return '1.1.0';
         }
 
         $manifest = json_decode(
@@ -86,7 +86,7 @@ class PackageManifest
         );
 
         if (!is_array($manifest)) {
-            return '1.0.0';
+            return '1.1.0';
         }
 
         $version = trim(
@@ -98,7 +98,7 @@ class PackageManifest
 
         return $version !== ''
             ? $version
-            : '1.0.0';
+            : '1.1.0';
     }
 
     /*

@@ -4,6 +4,7 @@ namespace NexaPressImportExport\Export;
 
 use NexaPressImportExport\Package\PackageBuilder;
 use NexaPressImportExport\Support\TempDirectory;
+use NexaPressImportExport\Support\OperationLock;
 use NexaPressImportExport\Validation\ExportValidator;
 use RuntimeException;
 use Throwable;
@@ -14,6 +15,18 @@ class ExportService
      * エクスポートパッケージを作成
      */
     public function create(
+        string $mode
+    ): array {
+        $lock = OperationLock::acquire();
+
+        try {
+            return $this->createPackage($mode);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    private function createPackage(
         string $mode
     ): array {
         $modes =

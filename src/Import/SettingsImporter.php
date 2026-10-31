@@ -13,8 +13,18 @@ class SettingsImporter
      */
     public function import(
         string $packageDirectory,
-        array $limits
+        array $limits,
+        bool $importDebug = false
     ): int {
+        return (new SettingsRepository())->save($this->prepare($packageDirectory, $limits, $importDebug));
+    }
+
+    public function prepare(
+        string $packageDirectory,
+        array $limits,
+        bool $importDebug = false,
+        ?UrlRewriter $rewriter = null
+    ): array {
         $maxJsonSize = (int)(
             $limits['max_json_size']
             ?? 20971520
@@ -60,11 +70,8 @@ class SettingsImporter
         ];
 
         foreach ($sections as $section) {
-            $section = trim(
-                (string)$section
-            );
-
             if (
+                !is_string($section) ||
                 !in_array(
                     $section,
                     $allowedSections,
@@ -97,14 +104,26 @@ class SettingsImporter
         foreach ($sections as $section) {
             $section = (string)$section;
 
+            if ($section === 'debug' && !$importDebug) {
+                continue;
+            }
+
             $selectedSettings[$section] =
                 $settings[$section];
+        }
+
+        if ($selectedSettings === []) {
+            throw new RuntimeException('取り込む設定がありません。デバッグ設定を取り込む場合は専用のチェックを選択してください。');
         }
 
         $repository =
             new SettingsRepository();
 
-        return $repository->save(
+        if ($rewriter !== null && isset($selectedSettings['general']['site_icon']) && is_string($selectedSettings['general']['site_icon'])) {
+            $selectedSettings['general']['site_icon'] = $rewriter->rewrite($selectedSettings['general']['site_icon'], 'サイトアイコン');
+        }
+
+        return $repository->validate(
             $selectedSettings
         );
     }

@@ -11,6 +11,12 @@ return [
         100 * 1024 * 1024,
 
     /*
+     * ZIP展開後の実測合計容量：500MB
+     */
+    'max_extracted_size' =>
+        500 * 1024 * 1024,
+
+    /*
      * JSONファイル1個の最大容量：20MB
      */
     'max_json_size' =>
@@ -31,6 +37,24 @@ return [
      * メディアファイルの最大件数
      */
     'max_media_files' => 2000,
+
+    /*
+     * 投稿・固定ページ・カテゴリーの合計件数
+     */
+    'max_content_items' => 10000,
+
+    /*
+     * プレビュー保存時間・ユーザーごとの保存件数
+     */
+    'preview_lifetime' => 3600,
+    'max_pending_previews' => 3,
+
+    /*
+     * 自動バックアップ：1件500MB、合計1GB、直近5件
+     */
+    'max_backup_size' => 500 * 1024 * 1024,
+    'max_backup_storage_size' => 1024 * 1024 * 1024,
+    'max_backups' => 5,
 
     /*
      * 一時ファイルの保存時間：1時間

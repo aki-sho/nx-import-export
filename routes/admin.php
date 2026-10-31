@@ -35,3 +35,7 @@ $router->post(
     $adminBase . '/import',
     ImportController::class . '@import'
 );
+
+$router->post($adminBase . '/preview', ImportController::class . '@preview');
+$router->post($adminBase . '/cancel-preview', ImportController::class . '@cancel');
+$router->post($adminBase . '/restore', ImportController::class . '@restore');

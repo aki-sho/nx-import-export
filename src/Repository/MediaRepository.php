@@ -3,6 +3,7 @@
 namespace NexaPressImportExport\Repository;
 
 use app\Core\Database;
+use NexaPressImportExport\Support\SafePath;
 use RuntimeException;
 
 class MediaRepository
@@ -85,16 +86,19 @@ class MediaRepository
      * インポート先の絶対パスを取得
      */
     public function targetFile(
-        string $filePath
+        string $filePath,
+        bool $createParents = true
     ): string {
         $relativePath =
             $this->normalizeMediaPath(
                 $filePath
             );
 
-        return BASE_PATH
-            . '/public/'
-            . $relativePath;
+        return SafePath::file(
+            BASE_PATH,
+            'public/' . $relativePath,
+            $createParents
+        );
     }
 
     /*
@@ -102,7 +106,8 @@ class MediaRepository
      */
     public function save(
         array $data,
-        int $userId
+        int $userId,
+        bool $allowUpdate = true
     ): int {
         $pdo = Database::connect();
 
@@ -121,6 +126,7 @@ class MediaRepository
                 $filePath
             );
 
+        if ($existingId !== null && !$allowUpdate) { throw new RuntimeException('取り込み中にメディア保存先が重複しました。再度プレビューしてください。'); }
         if ($existingId !== null) {
             $statement = $pdo->prepare("
                 UPDATE {$table}

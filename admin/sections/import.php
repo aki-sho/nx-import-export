@@ -29,9 +29,13 @@ $maxPackageSizeMb =
     );
 
 $fieldName = 'mode';
-$selectedMode = 'content';
+$selectedMode = $preview['mode'] ?? 'content';
 $inputIdPrefix = 'nx-import-mode';
+$importOptions = $preview['options'] ?? ['conflict' => 'overwrite', 'url_from' => '', 'url_to' => '', 'import_debug' => false];
 ?>
+
+<?php if (($managementError ?? '') !== ''): ?><div class="nx-import-export-notice is-error" role="alert"><?= e($managementError) ?></div><?php endif; ?>
+<?php require NX_IMPORT_EXPORT_PATH . '/admin/partials/import-preview.php'; ?>
 
 <div class="nx-import-export-card">
     <div class="nx-import-export-card-header">
@@ -39,7 +43,7 @@ $inputIdPrefix = 'nx-import-mode';
 
         <p>
             NX Import Exportで作成した
-            ZIPファイルを取り込みます。
+            ZIPファイルを検証し、変更内容をプレビューします。
         </p>
     </div>
 
@@ -50,7 +54,7 @@ $inputIdPrefix = 'nx-import-mode';
             url(
                 'admin/extensions/'
                 . NX_IMPORT_EXPORT_ID
-                . '/import'
+                . '/preview'
             )
         ) ?>"
         class="nx-import-export-form"
@@ -60,6 +64,8 @@ $inputIdPrefix = 'nx-import-mode';
             name="_csrf_token"
             value="<?= e(Csrf::token()) ?>"
         >
+
+        <?php if ($preview !== null): ?><input type="hidden" name="preview_token" value="<?= e($preview['id']) ?>"><?php endif; ?>
 
         <div class="nx-import-export-field">
             <label for="nx-import-file">
@@ -71,12 +77,13 @@ $inputIdPrefix = 'nx-import-mode';
                 type="file"
                 name="import_file"
                 accept=".zip,application/zip"
-                required
+                <?= $preview === null ? 'required' : '' ?>
             >
 
             <p class="nx-import-export-help">
                 ZIP形式・最大
                 <?= e((string)$maxPackageSizeMb) ?>MB
+                <?= $preview !== null ? '。ファイルを選択しなければ現在のZIPで再確認します。' : '' ?>
             </p>
         </div>
 
@@ -96,12 +103,41 @@ $inputIdPrefix = 'nx-import-mode';
             ?>
         </fieldset>
 
+        <fieldset data-nx-content-options>
+            <legend>同じスラッグ・メディア保存先がある場合</legend>
+            <label for="nx-import-conflict">重複時の処理</label>
+            <select id="nx-import-conflict" name="conflict">
+                <?php foreach (['overwrite' => '既存データを上書き', 'skip' => '既存データを残してスキップ', 'rename' => '別名で追加して両方を残す'] as $value => $label): ?>
+                    <option value="<?= e($value) ?>" <?= $importOptions['conflict'] === $value ? 'selected' : '' ?>><?= e($label) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <p class="nx-import-export-help">別名で追加したカテゴリーの関連付けや、本文内のメディア参照も更新します。設定はプレビューを確認してから上書きします。</p>
+        </fieldset>
+
+        <fieldset>
+            <legend>移行時のURL置換（任意）</legend>
+            <div class="nx-import-export-url-fields">
+                <div class="nx-import-export-field"><label for="nx-url-from">移行元のURL</label><input id="nx-url-from" name="url_from" type="url" placeholder="https://old.example.com" maxlength="2048" value="<?= e($importOptions['url_from']) ?>"></div>
+                <div class="nx-import-export-field"><label for="nx-url-to">移行先のURL</label><input id="nx-url-to" name="url_to" type="url" placeholder="https://new.example.com" maxlength="2048" value="<?= e($importOptions['url_to']) ?>"></div>
+            </div>
+            <p class="nx-import-export-help">本文内の絶対URLとサイトアイコンを置換します。サブディレクトリまで指定できます。両方空欄ならURLは変更しません。</p>
+        </fieldset>
+
+        <div class="nx-import-export-field" data-nx-debug-option>
+            <label>
+                <input type="checkbox" name="import_debug" value="1" <?= $importOptions['import_debug'] ? 'checked' : '' ?>>
+                デバッグ設定も取り込む
+            </label>
+            <p class="nx-import-export-help">
+                「設定のみ」で有効です。デバッグが有効になると詳細なエラー情報が表示される場合があります。
+            </p>
+        </div>
+
         <div class="nx-import-export-warning">
             <strong>注意</strong>
 
             <p>
-                既存データと重複する内容が含まれる場合があります。
-                本番環境では、事前にバックアップを取得してください。
+                この段階では取り込み先を変更しません。プレビューの確認後に実行すると、変更前のデータを自動バックアップします。
             </p>
         </div>
 
@@ -110,8 +146,10 @@ $inputIdPrefix = 'nx-import-mode';
                 type="submit"
                 class="button button-primary"
             >
-                インポートを実行
+                <?= $preview === null ? '変更内容をプレビュー' : '条件を変更して再プレビュー' ?>
             </button>
         </div>
     </form>
 </div>
+
+<?php require NX_IMPORT_EXPORT_PATH . '/admin/partials/backups.php'; ?>

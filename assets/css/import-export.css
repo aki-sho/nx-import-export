@@ -7,6 +7,31 @@
     max-width: 1100px;
 }
 
+.nx-import-export-review,
+.nx-import-export-backups { margin-bottom: 24px; }
+.nx-import-export-backups { margin-top: 24px; }
+.nx-import-export-review-body { padding: 20px 24px; }
+.nx-import-export-review-body h3 { margin: 22px 0 10px; font-size: 16px; }
+.nx-import-export-review-body details { margin: 16px 0; }
+.nx-import-export-review-body summary { cursor: pointer; font-weight: 600; }
+.nx-import-export-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.nx-import-export-summary > div { padding: 14px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }
+.nx-import-export-summary strong,
+.nx-import-export-summary span { display: block; }
+.nx-import-export-summary span { margin-top: 6px; color: #475569; font-size: 13px; }
+.nx-import-export-scroll { max-width: 100%; overflow-x: auto; margin-top: 12px; }
+.nx-import-export-table { width: 100%; min-width: 620px; border-collapse: collapse; font-size: 13px; text-align: left; }
+.nx-import-export-table th,
+.nx-import-export-table td { padding: 12px; border-bottom: 1px solid #e2e8f0; vertical-align: top; overflow-wrap: anywhere; }
+.nx-import-export-table th { background: #f8fafc; }
+.nx-import-export-table code { white-space: normal; }
+.nx-import-export-review-actions { display: flex; flex-wrap: wrap; gap: 12px; padding: 0 24px 24px; }
+.nx-import-export-url-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.nx-import-export-url-fields input,
+.nx-import-export-form select { width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px; background: white; color: #0f172a; font: inherit; }
+.nx-import-export-url-example { margin: 12px 0; padding: 12px; border: 1px solid #e2e8f0; border-radius: 6px; }
+.nx-import-export-url-example pre { margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+
 .nx-import-export,
 .nx-import-export * {
     box-sizing: border-box;

@@ -41,7 +41,8 @@ class ContentRepository
      * カテゴリーを追加または更新
      */
     public function saveCategory(
-        array $data
+        array $data,
+        bool $allowUpdate = true
     ): int {
         $pdo = Database::connect();
 
@@ -56,6 +57,7 @@ class ContentRepository
                 (string)$data['slug']
             );
 
+        if ($existingId !== null && !$allowUpdate) { throw new RuntimeException('取り込み中にカテゴリースラッグが重複しました。再度プレビューしてください。'); }
         if ($existingId !== null) {
             $statement = $pdo->prepare("
                 UPDATE {$table}
@@ -116,7 +118,8 @@ class ContentRepository
     public function savePost(
         array $data,
         int $userId,
-        ?int $categoryId
+        ?int $categoryId,
+        bool $allowUpdate = true
     ): int {
         $pdo = Database::connect();
 
@@ -131,6 +134,7 @@ class ContentRepository
                 (string)$data['slug']
             );
 
+        if ($existingId !== null && !$allowUpdate) { throw new RuntimeException('取り込み中に投稿スラッグが重複しました。再度プレビューしてください。'); }
         if ($existingId !== null) {
             $statement = $pdo->prepare("
                 UPDATE {$table}
@@ -235,7 +239,8 @@ class ContentRepository
      */
     public function savePage(
         array $data,
-        int $userId
+        int $userId,
+        bool $allowUpdate = true
     ): int {
         $pdo = Database::connect();
 
@@ -250,6 +255,7 @@ class ContentRepository
                 (string)$data['slug']
             );
 
+        if ($existingId !== null && !$allowUpdate) { throw new RuntimeException('取り込み中に固定ページスラッグが重複しました。再度プレビューしてください。'); }
         if ($existingId !== null) {
             $statement = $pdo->prepare("
                 UPDATE {$table}
