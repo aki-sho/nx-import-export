@@ -224,7 +224,7 @@ test('backup protects categories referenced by posts created after import', func
 });
 
 test('settings preview and restore preserve raw original configuration and debug opt-in', function () use ($root) {
-    $original = "<?php\n// original formatting\nreturn ['site_title' => 'Original config', 'timezone' => 'Asia/Tokyo'];\n";
+    $original = "<?php\n// original formatting\nreturn ['site_title' => 'Original config', 'timezone' => 'Asia/Tokyo', 'homepage_mode' => 'page', 'homepage_page_id' => 9];\n";
     file_put_contents($root . '/config/general.php', $original);
     (new SettingsRepository())->save(['debug' => ['enabled' => false]]);
     $zip = settingsPackage(['general' => ['site_title' => 'New config', 'site_icon' => 'https://old.test/icon.png'], 'debug' => ['enabled' => true]]);
@@ -233,7 +233,10 @@ test('settings preview and restore preserve raw original configuration and debug
     check(file_get_contents($root . '/config/general.php') === $original, 'Settings preview wrote config');
     check(count($preview['summary']['settings']) > 0, 'Settings diff absent');
     $result = $service->confirm($preview['id']);
-    check((require $root . '/config/general.php')['site_icon'] === 'https://new.test/icon.png', 'Icon URL not rewritten');
+    $general = require $root . '/config/general.php';
+    check($general['site_icon'] === 'https://new.test/icon.png', 'Icon URL not rewritten');
+    check($general['homepage_mode'] === 'page' && $general['homepage_page_id'] === 9, 'Destination homepage was changed');
+    check(!isset((new SettingsRepository())->export()['general']['homepage_page_id']), 'Destination-specific page ID leaked into the settings package');
     check((require $root . '/config/debug.php')['enabled'] === false, 'Debug opt-in bypassed');
     (new BackupService())->restore($result['backup_id'], 1);
     check(file_get_contents($root . '/config/general.php') === $original, 'Original config bytes not restored');

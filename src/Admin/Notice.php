@@ -2,6 +2,10 @@
 
 namespace NexaPressImportExport\Admin;
 
+use PDOException;
+use RuntimeException;
+use Throwable;
+
 class Notice
 {
     /*
@@ -32,6 +36,16 @@ class Notice
             'error',
             $message
         );
+    }
+
+    public static function failure(Throwable $exception, string $message): void
+    {
+        if ($exception instanceof RuntimeException && !($exception instanceof PDOException)) {
+            self::error($exception->getMessage());
+            return;
+        }
+        error_log('[NX Import Export] ' . get_class($exception) . ' (' . $exception->getCode() . ')');
+        self::error($message);
     }
 
     /*

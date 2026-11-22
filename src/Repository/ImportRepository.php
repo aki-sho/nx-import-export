@@ -8,7 +8,9 @@ use RuntimeException;
 
 class ImportRepository
 {
-    public const KEYS = ['categories' => 'slug', 'posts' => 'slug', 'pages' => 'slug', 'media' => 'file_path'];
+    public const KEYS = [
+        'categories' => 'slug', 'posts' => 'slug', 'pages' => 'slug', 'media' => 'file_path', 'media_folders' => 'name',
+    ];
 
     public function find(string $type, string $value): ?array
     {
@@ -76,24 +78,48 @@ class ImportRepository
         $query->execute($parameters);
     }
 
-    public function assertCategoryReferences(array $before): void
+    public function assertReferences(array $before): void
     {
-        $trackedIds = [];
-        foreach (array_keys($before['posts'] ?? []) as $slug) {
-            $post = $this->find('posts', $slug);
-            if ($post !== null) { $trackedIds[] = (int)$post['id']; }
+        $this->assertNoExternalReferences($before, 'categories', 'posts', 'category_id',
+            '追加されたカテゴリーが別の投稿から参照されているため復元できません。');
+        $this->assertNoExternalReferences($before, 'media', 'posts', 'featured_media_id',
+            '追加されたメディアが別の投稿のアイキャッチに使われているため復元できません。');
+        $this->assertNoExternalReferences($before, 'media_folders', 'media', 'folder_id',
+            '追加されたフォルダが別のメディアに使われているため復元できません。');
+    }
+
+    private function assertNoExternalReferences(
+        array $before,
+        string $type,
+        string $dependentType,
+        string $reference,
+        string $message
+    ): void {
+        $added = array_keys(array_filter($before[$type] ?? [], static fn($row): bool => $row === null));
+        if ($added === []) {
+            return;
         }
-        $posts = $this->table('posts');
-        foreach ($before['categories'] ?? [] as $slug => $category) {
-            if ($category !== null) { continue; }
-            $current = $this->find('categories', $slug);
-            if ($current === null) { continue; }
-            $sql = "SELECT COUNT(*) FROM {$posts} WHERE category_id = :id";
-            if ($trackedIds !== []) { $sql .= ' AND id NOT IN (' . implode(',', $trackedIds) . ')'; }
-            $query = Database::connect()->prepare($sql);
+        $trackedIds = [];
+        foreach (array_keys($before[$dependentType]) as $key) {
+            $record = $this->find($dependentType, (string)$key);
+            if ($record !== null) {
+                $trackedIds[] = (int)$record['id'];
+            }
+        }
+        $table = $this->table($dependentType);
+        $sql = "SELECT 1 FROM {$table} WHERE {$reference} = :id";
+        if ($trackedIds !== []) {
+            $sql .= ' AND id NOT IN (' . implode(',', $trackedIds) . ')';
+        }
+        $query = Database::connect()->prepare($sql . ' LIMIT 1');
+        foreach ($added as $key) {
+            $current = $this->find($type, (string)$key);
+            if ($current === null) {
+                continue;
+            }
             $query->execute([':id' => $current['id']]);
-            if ((int)$query->fetchColumn() > 0) {
-                throw new RuntimeException('追加されたカテゴリーが別の投稿から参照されているため復元できません。');
+            if ($query->fetchColumn() !== false) {
+                throw new RuntimeException($message);
             }
         }
     }

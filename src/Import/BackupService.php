@@ -15,7 +15,7 @@ use Throwable;
 
 class BackupService
 {
-    private const TYPES = ['categories', 'posts', 'pages', 'media', 'files', 'settings'];
+    private const TYPES = ['categories', 'posts', 'pages', 'media', 'media_folders', 'files', 'settings'];
 
     public function create(array $targets, string $mode, int $userId, string $kind = 'import', array $protect = []): string
     {
@@ -77,6 +77,9 @@ class BackupService
         $metadata = PrivateStorage::read('backups', $id, 'manifest.json');
         $state = [];
         foreach (self::TYPES as $type) {
+            if ($type === 'media_folders' && !array_key_exists($type, $metadata['targets'])) {
+                continue;
+            }
             $name = $phase . '-' . $type . '.json';
             $path = SafePath::file(PrivateStorage::directory('backups', $id, false), $name, false);
             $expected = $metadata[$phase . '_checksums'][$type] ?? '';
@@ -129,11 +132,11 @@ class BackupService
         if (!hash_equals($metadata['after_hash'], ImportSnapshot::digest($current))) {
             throw new RuntimeException('取り込み後に対象データが変更されています。後から行った編集を守るため復元を中止しました。');
         }
-        (new ImportRepository())->assertCategoryReferences($before);
+        (new ImportRepository())->assertReferences($before);
         // 復元処理そのものも取り消せるよう、現在の状態を先に保存する。
         $guard = $this->create($metadata['targets'], $metadata['mode'], $userId, 'restore', [$id]);
         $usesDatabase = false;
-        foreach (array_keys(ImportRepository::KEYS) as $type) { $usesDatabase = $usesDatabase || $metadata['targets'][$type] !== []; }
+        foreach (array_keys(ImportRepository::KEYS) as $type) { $usesDatabase = $usesDatabase || !empty($metadata['targets'][$type]); }
         $pdo = null;
         $started = false;
         $filesTouched = false;
@@ -173,9 +176,9 @@ class BackupService
     private function writeState(string $id, string $phase, array $state): array
     {
         $checksums = [];
-        foreach (self::TYPES as $type) {
+        foreach ($state as $type => $rows) {
             $name = $phase . '-' . $type . '.json';
-            PrivateStorage::write('backups', $id, $name, $state[$type]);
+            PrivateStorage::write('backups', $id, $name, $rows);
             $checksums[$type] = hash_file('sha256', SafePath::file(PrivateStorage::directory('backups', $id, false), $name, false));
         }
         return $checksums;

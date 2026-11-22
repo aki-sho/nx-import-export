@@ -81,7 +81,9 @@ class ImportController
         Permission::require('extensions.manage');
         Csrf::requireValid($_POST['_csrf_token'] ?? null);
         try { $action(); }
-        catch (Throwable $exception) { Notice::error($exception->getMessage()); }
+        catch (Throwable $exception) {
+            Notice::failure($exception, '取り込みまたは復元を完了できませんでした。サーバーのログを確認してください。');
+        }
         $_SESSION['nx_import_export_active_tab'] = 'import';
         redirect_to('admin/extensions/' . NX_IMPORT_EXPORT_ID . '/dashboard');
     }

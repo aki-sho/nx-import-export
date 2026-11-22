@@ -5,6 +5,7 @@ namespace NexaPressImportExport\Package;
 use FilesystemIterator;
 use NexaPressImportExport\Support\FileName;
 use NexaPressImportExport\Support\Json;
+use NexaPressImportExport\Support\Limits;
 use NexaPressImportExport\Support\Zip;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -125,8 +126,23 @@ class PackageBuilder
                 $sourcePath
             );
 
-        $packageName =
-            FileName::exportPackage();
+        $limits = Limits::all();
+        if (count($packageFiles) > (int)($limits['max_archive_entries'] ?? 5000)) {
+            throw new RuntimeException('ZIP内のファイル数が制限を超えています。');
+        }
+        $remaining = (int)($limits['max_extracted_size'] ?? 524288000);
+        foreach ($packageFiles as $relativePath) {
+            $size = filesize($sourcePath . '/' . $relativePath);
+            $limit = str_ends_with(strtolower($relativePath), '.json')
+                ? (int)($limits['max_json_size'] ?? 20971520)
+                : (int)($limits['max_media_file_size'] ?? 52428800);
+            if ($size === false || $size > $remaining || $size > $limit) {
+                throw new RuntimeException('ZIPに格納するファイルの容量が制限を超えています。');
+            }
+            $remaining -= $size;
+        }
+
+        $packageName = FileName::exportPackage();
 
         $packagePath =
             rtrim(
@@ -183,6 +199,12 @@ class PackageBuilder
             throw new RuntimeException(
                 'エクスポートZIPを作成できませんでした。'
             );
+        }
+
+        $packageSize = filesize($packagePath);
+        if ($packageSize === false || $packageSize > (int)($limits['max_package_size'] ?? 104857600)) {
+            unlink($packagePath);
+            throw new RuntimeException('エクスポートZIPの容量が取り込み可能な上限を超えています。');
         }
 
         return [

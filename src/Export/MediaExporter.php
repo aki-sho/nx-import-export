@@ -67,6 +67,7 @@ class MediaExporter
 
         $exportedItems = [];
         $archivePaths = [];
+        $remaining = (int)($limits['max_extracted_size'] ?? 524288000);
 
         foreach ($mediaItems as $row) {
             if (!is_array($row)) {
@@ -112,6 +113,11 @@ class MediaExporter
                     . $filePath
                 );
             }
+
+            if ($fileSize > $remaining) {
+                throw new RuntimeException('メディアの合計容量が制限を超えています。');
+            }
+            $remaining -= $fileSize;
 
             /*
              * ZIP内ではmedia以下へ保存
@@ -182,7 +188,7 @@ class MediaExporter
                 );
             }
 
-            $exportedItems[] = [
+            $item = [
                 'id' =>
                     (int)(
                         $row['id']
@@ -249,6 +255,10 @@ class MediaExporter
                         ?? null
                     ),
             ];
+            if (array_key_exists('folder_name', $row)) {
+                $item['folder_name'] = $row['folder_name'];
+            }
+            $exportedItems[] = $item;
         }
 
         Json::write(

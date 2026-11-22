@@ -130,9 +130,8 @@ class ExportController
                 . $fileSize
             );
 
-            header(
-                'X-Content-Type-Options: nosniff'
-            );
+            header('Cache-Control: private, no-store');
+            header('X-Content-Type-Options: nosniff');
 
             fpassthru($handle);
             fclose($handle);
@@ -154,9 +153,7 @@ class ExportController
                 );
             }
 
-            Notice::error(
-                $exception->getMessage()
-            );
+            Notice::failure($exception, 'エクスポートを完了できませんでした。サーバーのログを確認してください。');
 
             $this->redirect();
         }

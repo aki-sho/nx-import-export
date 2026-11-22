@@ -70,6 +70,11 @@ class UrlRewriter
         return $value;
     }
 
+    public function mediaPath(string $path): string
+    {
+        return $this->mediaPaths[$path] ?? $path;
+    }
+
     public function result(): array { return ['count' => $this->count, 'samples' => $this->samples]; }
 
     private function replacement(string $from, string $to, int &$size): string

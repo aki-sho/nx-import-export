@@ -45,12 +45,20 @@ class ImportPlanner
             foreach ($entries as $entry) {
                 if ($entry['action'] !== 'skip') {
                     $targets[$type][] = $entry['key'];
-                    if ($type === 'media') { $targets['files'][] = 'public/' . $entry['key']; }
+                    if ($type === 'media') {
+                        $targets['files'][] = 'public/' . $entry['key'];
+                        if (isset($entry['data']['folder_name'])) {
+                            $targets['media_folders'][] = $entry['data']['folder_name'];
+                        }
+                    }
                 }
             }
         }
         foreach (array_keys($plan['settings']) as $section) { $targets['settings'][] = 'config/' . $section . '.php'; }
-        foreach ($targets as &$keys) { sort($keys, SORT_STRING); }
+        foreach ($targets as &$keys) {
+            $keys = array_values(array_unique($keys));
+            sort($keys, SORT_STRING);
+        }
         return $targets;
     }
 

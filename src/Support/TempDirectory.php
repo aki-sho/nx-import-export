@@ -44,7 +44,7 @@ class TempDirectory
             if (
                 mkdir(
                     $directory,
-                    0755
+                    0700
                 )
             ) {
                 return $directory;
@@ -167,8 +167,7 @@ class TempDirectory
             );
         }
 
-        return BASE_PATH
-            . '/storage/cache';
+        return SafePath::directory(BASE_PATH, 'storage/cache', false);
     }
 
     /*
@@ -216,9 +215,7 @@ class TempDirectory
                 is_dir($path) &&
                 !is_link($path)
             ) {
-                self::removeItems(
-                    $path
-                );
+                self::removeItems(SafePath::directory($directory, $item, false));
             } else {
                 unlink($path);
             }

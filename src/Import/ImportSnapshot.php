@@ -15,6 +15,9 @@ class ImportSnapshot
         $state = [];
         $lookup = new ImportRepository();
         foreach (array_keys(ImportRepository::KEYS) as $type) {
+            if (!array_key_exists($type, $targets)) {
+                continue;
+            }
             $state[$type] = [];
             foreach ($targets[$type] as $key) { $state[$type][$key] = $lookup->find($type, $key); }
         }
@@ -56,15 +59,27 @@ class ImportSnapshot
     public function restoreRows(array $state): void
     {
         $lookup = new ImportRepository();
-        $lookup->assertCategoryReferences($state);
-        foreach ($state['categories'] as $key => $row) {
-            if ($row !== null) { $lookup->restore('categories', $key, $row); }
+        $lookup->assertReferences($state);
+        // Restore referenced rows first, then remove additions after their dependents.
+        $references = ['categories', 'media_folders', 'media'];
+        foreach ($references as $type) {
+            foreach ($state[$type] ?? [] as $key => $row) {
+                if ($row !== null) {
+                    $lookup->restore($type, (string)$key, $row);
+                }
+            }
         }
-        foreach (['posts', 'pages', 'media'] as $type) {
-            foreach ($state[$type] as $key => $row) { $lookup->restore($type, $key, $row); }
+        foreach (['posts', 'pages'] as $type) {
+            foreach ($state[$type] as $key => $row) {
+                $lookup->restore($type, (string)$key, $row);
+            }
         }
-        foreach ($state['categories'] as $key => $row) {
-            if ($row === null) { $lookup->restore('categories', $key, null); }
+        foreach (array_reverse($references) as $type) {
+            foreach ($state[$type] ?? [] as $key => $row) {
+                if ($row === null) {
+                    $lookup->restore($type, (string)$key, null);
+                }
+            }
         }
     }
 }

@@ -1,6 +1,6 @@
 <?php
 
-namespace NexaPressImportExport\Repository {
+namespace NexaPressImportExport\Support {
     // 設定の2区分目の保存失敗を再現し、1区分目も復旧することを確認する。
     function rename(string $from, string $to): bool
     {

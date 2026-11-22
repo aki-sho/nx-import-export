@@ -109,7 +109,12 @@ class ImportService
                 $started = true;
                 $lockedTargets = $targets;
                 foreach ($plan['content'] as $type => $entries) {
-                    foreach ($entries as $entry) { $lockedTargets[$type][] = $entry['key']; }
+                    foreach ($entries as $entry) {
+                        $lockedTargets[$type][] = $entry['key'];
+                        if ($entry['action'] !== 'skip' && isset($entry['data']['featured_media_path'])) {
+                            $lockedTargets['media'][] = $entry['data']['featured_media_path'];
+                        }
+                    }
                 }
                 (new ImportRepository())->lockTargets($lockedTargets);
             }
@@ -127,14 +132,14 @@ class ImportService
                     }
                 }
             }
-            $content = (new ContentImporter())->apply($plan['content'], $userId);
-            foreach ($content as $type => $count) { $result[$type] = $count; }
             if ($plan['media'] !== []) {
                 $filesTouched = true;
                 $media = $mediaImporter->apply($directory, $plan['media'], $userId);
                 $result['media'] = $media['count'];
                 $mediaState = $media['state'];
             }
+            $content = (new ContentImporter())->apply($plan['content'], $userId);
+            foreach ($content as $type => $count) { $result[$type] = $count; }
             if ($plan['settings'] !== []) { $filesTouched = true; $result['settings'] = (new SettingsRepository())->save($plan['settings']); }
             // 復元に必要な取り込み後の状態も、DBの確定前に保存する。
             $backups->seal($id);

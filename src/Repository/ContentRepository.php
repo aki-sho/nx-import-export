@@ -22,9 +22,19 @@ class ContentRepository
      */
     public function posts(): array
     {
-        return $this->allRows(
-            'posts'
-        );
+        $posts = Database::table('posts');
+        $media = Database::table('media');
+        $statement = Database::connect()->query("
+            SELECT p.*, m.file_path AS featured_media_path
+            FROM {$posts} p
+            LEFT JOIN {$media} m ON m.id = p.featured_media_id
+            WHERE p.deleted_at IS NULL
+            ORDER BY p.id ASC
+        ");
+        if ($statement === false) {
+            throw new RuntimeException('投稿を取得できませんでした。');
+        }
+        return $statement->fetchAll();
     }
 
     /*
@@ -122,115 +132,33 @@ class ContentRepository
         bool $allowUpdate = true
     ): int {
         $pdo = Database::connect();
+        $table = Database::table('posts');
+        $existingId = $this->findIdBySlug('posts', $data['slug']);
+        $values = [
+            'title' => $data['title'],
+            'content' => $data['content'],
+            'status' => $data['status'],
+            'user_id' => $userId,
+            'category_id' => $categoryId,
+            'published_at' => $data['published_at'],
+            'updated_at' => $data['updated_at'],
+        ] + array_intersect_key($data, ['excerpt' => true, 'featured_media_id' => true]);
 
-        $table =
-            Database::table(
-                'posts'
-            );
-
-        $existingId =
-            $this->findIdBySlug(
-                'posts',
-                (string)$data['slug']
-            );
-
-        if ($existingId !== null && !$allowUpdate) { throw new RuntimeException('取り込み中に投稿スラッグが重複しました。再度プレビューしてください。'); }
         if ($existingId !== null) {
-            $statement = $pdo->prepare("
-                UPDATE {$table}
-                SET title = :title,
-                    content = :content,
-                    status = :status,
-                    user_id = :user_id,
-                    category_id = :category_id,
-                    published_at = :published_at,
-                    updated_at = :updated_at
-                WHERE id = :id
-            ");
-
-            $statement->execute([
-                ':title' =>
-                    $data['title'],
-
-                ':content' =>
-                    $data['content'],
-
-                ':status' =>
-                    $data['status'],
-
-                ':user_id' =>
-                    $userId,
-
-                ':category_id' =>
-                    $categoryId,
-
-                ':published_at' =>
-                    $data['published_at'],
-
-                ':updated_at' =>
-                    $data['updated_at'],
-
-                ':id' =>
-                    $existingId,
-            ]);
-
+            if (!$allowUpdate) {
+                throw new RuntimeException('取り込み中に投稿スラッグが重複しました。再度プレビューしてください。');
+            }
+            $assignments = array_map(static fn(string $column): string => "$column = :$column", array_keys($values));
+            $statement = $pdo->prepare("UPDATE {$table} SET " . implode(', ', $assignments) . ' WHERE id = :id');
+            $statement->execute($values + ['id' => $existingId]);
             return $existingId;
         }
 
-        $statement = $pdo->prepare("
-            INSERT INTO {$table} (
-                title,
-                slug,
-                content,
-                status,
-                user_id,
-                category_id,
-                published_at,
-                created_at,
-                updated_at
-            )
-            VALUES (
-                :title,
-                :slug,
-                :content,
-                :status,
-                :user_id,
-                :category_id,
-                :published_at,
-                :created_at,
-                :updated_at
-            )
-        ");
-
-        $statement->execute([
-            ':title' =>
-                $data['title'],
-
-            ':slug' =>
-                $data['slug'],
-
-            ':content' =>
-                $data['content'],
-
-            ':status' =>
-                $data['status'],
-
-            ':user_id' =>
-                $userId,
-
-            ':category_id' =>
-                $categoryId,
-
-            ':published_at' =>
-                $data['published_at'],
-
-            ':created_at' =>
-                $data['created_at'],
-
-            ':updated_at' =>
-                $data['updated_at'],
-        ]);
-
+        $values += ['slug' => $data['slug'], 'created_at' => $data['created_at']];
+        $columns = array_keys($values);
+        $statement = $pdo->prepare("INSERT INTO {$table} (" . implode(', ', $columns)
+            . ') VALUES (:' . implode(', :', $columns) . ')');
+        $statement->execute($values);
         return (int)$pdo->lastInsertId();
     }
 

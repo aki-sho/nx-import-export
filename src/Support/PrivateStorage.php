@@ -62,9 +62,13 @@ class PrivateStorage
         }
         fclose($handle);
         if (DIRECTORY_SEPARATOR !== '\\') { chmod($temporary, 0600); }
-        if (!rename($temporary, $target)) {
+        try {
+            if (!rename($temporary, $target)) {
+                throw new RuntimeException('保存ファイルを配置できませんでした。');
+            }
+        } catch (\Throwable $exception) {
             @unlink($temporary);
-            throw new RuntimeException('保存ファイルを配置できませんでした。');
+            throw $exception;
         }
     }
 

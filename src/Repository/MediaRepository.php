@@ -3,6 +3,7 @@
 namespace NexaPressImportExport\Repository;
 
 use app\Core\Database;
+use app\Models\Media;
 use NexaPressImportExport\Support\SafePath;
 use RuntimeException;
 
@@ -13,73 +14,32 @@ class MediaRepository
      */
     public function all(): array
     {
-        $pdo = Database::connect();
-
-        $table =
-            Database::table(
-                'media'
-            );
-
-        $statement = $pdo->query("
-            SELECT *
-            FROM {$table}
-            ORDER BY id ASC
-        ");
-
-        if ($statement === false) {
-            throw new RuntimeException(
-                'メディア情報を取得できませんでした。'
-            );
+        $table = Database::table('media');
+        $sql = "SELECT * FROM {$table} ORDER BY id ASC";
+        if (self::supportsFolders()) {
+            $folders = Database::table('media_folders');
+            $sql = "SELECT m.*, f.name AS folder_name FROM {$table} m
+                LEFT JOIN {$folders} f ON f.id = m.folder_id ORDER BY m.id ASC";
         }
-
+        $statement = Database::connect()->query($sql);
+        if ($statement === false) {
+            throw new RuntimeException('メディア情報を取得できませんでした。');
+        }
         return $statement->fetchAll();
+    }
+
+    public static function supportsFolders(): bool
+    {
+        return method_exists(Media::class, 'createFolder');
     }
 
     /*
      * 公開フォルダ内の元ファイルを取得
      */
-    public function sourceFile(
-        string $filePath
-    ): ?string {
-        $publicPath = realpath(
-            BASE_PATH . '/public'
-        );
-
-        if ($publicPath === false) {
-            return null;
-        }
-
-        $relativePath =
-            $this->normalizeMediaPath(
-                $filePath
-            );
-
-        $candidate =
-            $publicPath
-            . DIRECTORY_SEPARATOR
-            . str_replace(
-                '/',
-                DIRECTORY_SEPARATOR,
-                $relativePath
-            );
-
-        $realFilePath = realpath(
-            $candidate
-        );
-
-        if (
-            $realFilePath === false ||
-            !is_file($realFilePath) ||
-            !str_starts_with(
-                $realFilePath,
-                $publicPath
-                . DIRECTORY_SEPARATOR
-            )
-        ) {
-            return null;
-        }
-
-        return $realFilePath;
+    public function sourceFile(string $filePath): ?string
+    {
+        $path = $this->targetFile($filePath, false);
+        return is_file($path) ? $path : null;
     }
 
     /*
@@ -104,143 +64,44 @@ class MediaRepository
     /*
      * メディア情報を追加または更新
      */
-    public function save(
-        array $data,
-        int $userId,
-        bool $allowUpdate = true
-    ): int {
+    public function save(array $data, int $userId, bool $allowUpdate = true): int
+    {
         $pdo = Database::connect();
+        $table = Database::table('media');
+        $filePath = $this->normalizeMediaPath($data['file_path']);
+        $existingId = $this->findIdByFilePath($filePath);
+        if ($existingId !== null && !$allowUpdate) {
+            throw new RuntimeException('取り込み中にメディア保存先が重複しました。再度プレビューしてください。');
+        }
 
-        $table =
-            Database::table(
-                'media'
-            );
+        $values = [
+            'title' => $data['title'],
+            'description' => $data['description'],
+            'original_name' => $data['original_name'],
+            'file_name' => $data['file_name'],
+            'mime_type' => $data['mime_type'],
+            'file_size' => $data['file_size'],
+            'file_type' => $data['file_type'],
+            'user_id' => $userId,
+            'updated_at' => $data['updated_at'],
+        ];
+        if (array_key_exists('folder_name', $data) && self::supportsFolders()) {
+            $name = $data['folder_name'];
+            $values['folder_id'] = $name === null ? null : Media::createFolder($name, true);
+        }
 
-        $filePath =
-            $this->normalizeMediaPath(
-                (string)$data['file_path']
-            );
-
-        $existingId =
-            $this->findIdByFilePath(
-                $filePath
-            );
-
-        if ($existingId !== null && !$allowUpdate) { throw new RuntimeException('取り込み中にメディア保存先が重複しました。再度プレビューしてください。'); }
         if ($existingId !== null) {
-            $statement = $pdo->prepare("
-                UPDATE {$table}
-                SET title = :title,
-                    description = :description,
-                    original_name = :original_name,
-                    file_name = :file_name,
-                    mime_type = :mime_type,
-                    file_size = :file_size,
-                    file_type = :file_type,
-                    user_id = :user_id,
-                    updated_at = :updated_at
-                WHERE id = :id
-            ");
-
-            $statement->execute([
-                ':title' =>
-                    $data['title'],
-
-                ':description' =>
-                    $data['description'],
-
-                ':original_name' =>
-                    $data['original_name'],
-
-                ':file_name' =>
-                    $data['file_name'],
-
-                ':mime_type' =>
-                    $data['mime_type'],
-
-                ':file_size' =>
-                    $data['file_size'],
-
-                ':file_type' =>
-                    $data['file_type'],
-
-                ':user_id' =>
-                    $userId,
-
-                ':updated_at' =>
-                    $data['updated_at'],
-
-                ':id' =>
-                    $existingId,
-            ]);
-
+            $assignments = array_map(static fn(string $column): string => "$column = :$column", array_keys($values));
+            $statement = $pdo->prepare("UPDATE {$table} SET " . implode(', ', $assignments) . ' WHERE id = :id');
+            $statement->execute($values + ['id' => $existingId]);
             return $existingId;
         }
 
-        $statement = $pdo->prepare("
-            INSERT INTO {$table} (
-                title,
-                description,
-                original_name,
-                file_name,
-                file_path,
-                mime_type,
-                file_size,
-                file_type,
-                user_id,
-                created_at,
-                updated_at
-            )
-            VALUES (
-                :title,
-                :description,
-                :original_name,
-                :file_name,
-                :file_path,
-                :mime_type,
-                :file_size,
-                :file_type,
-                :user_id,
-                :created_at,
-                :updated_at
-            )
-        ");
-
-        $statement->execute([
-            ':title' =>
-                $data['title'],
-
-            ':description' =>
-                $data['description'],
-
-            ':original_name' =>
-                $data['original_name'],
-
-            ':file_name' =>
-                $data['file_name'],
-
-            ':file_path' =>
-                $filePath,
-
-            ':mime_type' =>
-                $data['mime_type'],
-
-            ':file_size' =>
-                $data['file_size'],
-
-            ':file_type' =>
-                $data['file_type'],
-
-            ':user_id' =>
-                $userId,
-
-            ':created_at' =>
-                $data['created_at'],
-
-            ':updated_at' =>
-                $data['updated_at'],
-        ]);
-
+        $values += ['file_path' => $filePath, 'created_at' => $data['created_at']];
+        $columns = array_keys($values);
+        $statement = $pdo->prepare("INSERT INTO {$table} (" . implode(', ', $columns)
+            . ') VALUES (:' . implode(', :', $columns) . ')');
+        $statement->execute($values);
         return (int)$pdo->lastInsertId();
     }
 

@@ -120,6 +120,16 @@ class MediaImporter
                 'mime_type' => $mime, 'file_size' => $size, 'file_type' => $this->allowedTypes[$mime],
                 'created_at' => $created, 'updated_at' => $this->date($item['updated_at'] ?? null, $created),
             ];
+            if (array_key_exists('folder_name', $item)) {
+                $folder = $item['folder_name'];
+                if ($folder !== null && (!is_string($folder) || trim($folder) !== $folder ||
+                    !preg_match('/\A[^\p{Cc}]{1,100}\z/u', $folder))) {
+                    throw new RuntimeException('メディアのフォルダ名が正しくありません。');
+                }
+                if (MediaRepository::supportsFolders()) {
+                    $entry['data']['folder_name'] = $folder;
+                }
+            }
             $plan[] = $entry;
         }
         return $plan;
@@ -141,6 +151,9 @@ class MediaImporter
                 if ($source === false || !str_starts_with($source, $base . DIRECTORY_SEPARATOR)) { throw new RuntimeException('メディアのコピー元が正しくありません。'); }
                 $target = $repository->targetFile($entry['key']);
                 if (is_file($target)) {
+                    if ($entry['action'] === 'add') {
+                        throw new RuntimeException('取り込み中にメディア保存先が重複しました。再度プレビューしてください。');
+                    }
                     $backupName = hash('sha256', $entry['key']) . '.bak';
                     AtomicFile::copy($target, $backupDirectory, $backupName);
                     $state['replaced'][] = ['target' => $target, 'backup' => $backupDirectory . DIRECTORY_SEPARATOR . $backupName];

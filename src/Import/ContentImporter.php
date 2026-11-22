@@ -2,10 +2,12 @@
 
 namespace NexaPressImportExport\Import;
 
+use app\Core\HtmlSanitizer;
 use DateTimeImmutable;
 use NexaPressImportExport\Repository\ContentRepository;
 use NexaPressImportExport\Repository\ImportRepository;
 use NexaPressImportExport\Support\Json;
+use NexaPressImportExport\Validation\MediaValidator;
 use RuntimeException;
 
 class ContentImporter
@@ -13,6 +15,7 @@ class ContentImporter
     /*
      * コンテンツを取り込む
      */
+    private const MAX_TEXT_BYTES = 65535;
     private string $importedAt = '';
 
     public function import(
@@ -70,7 +73,7 @@ class ContentImporter
             $created = $this->date($category['created_at'] ?? null);
             $entry['source_id'] = $oldId;
             $entry['data'] = [
-                'name' => $this->requiredString($category['name'] ?? '', 'カテゴリー名'),
+                'name' => $this->requiredString($category['name'] ?? '', 'カテゴリー名', 100),
                 'slug' => $entry['key'],
                 'created_at' => $created,
                 'updated_at' => $this->date($category['updated_at'] ?? null, $created),
@@ -85,8 +88,15 @@ class ContentImporter
                 $created = $this->date($item['created_at'] ?? null);
                 $status = $this->status($item['status'] ?? 'draft');
                 $content = $item['content'] ?? '';
-                if (!is_string($content)) { throw new RuntimeException('本文は文字列で指定してください。'); }
-                if ($entry['action'] !== 'skip') { $content = $rewriter->rewrite($content, $types[$type] . '：' . $title); }
+                if (!is_string($content) || strlen($content) > self::MAX_TEXT_BYTES) {
+                    throw new RuntimeException('本文の形式または容量が正しくありません。');
+                }
+                if ($entry['action'] !== 'skip') {
+                    $content = HtmlSanitizer::sanitize($rewriter->rewrite($content, $types[$type] . '：' . $title));
+                    if (strlen($content) > self::MAX_TEXT_BYTES) {
+                        throw new RuntimeException('URL置換とHTML検査後の本文が保存できる容量を超えています。');
+                    }
+                }
                 $entry['data'] = [
                     'title' => $title, 'slug' => $entry['key'], 'content' => $content,
                     'status' => $status, 'created_at' => $created,
@@ -99,6 +109,20 @@ class ContentImporter
                         throw new RuntimeException('投稿から参照されたカテゴリーがパッケージにありません。');
                     }
                     $entry['category_id'] = $categoryId > 0 ? $categoryId : null;
+                    if (array_key_exists('excerpt', $item)) {
+                        $excerpt = $item['excerpt'] ?? '';
+                        if (!is_string($excerpt) || strlen($excerpt) > self::MAX_TEXT_BYTES) {
+                            throw new RuntimeException('投稿の抜粋の形式または長さが正しくありません。');
+                        }
+                        $entry['data']['excerpt'] = $excerpt;
+                    }
+                    if (array_key_exists('featured_media_path', $item)) {
+                        $path = $item['featured_media_path'];
+                        if ($path !== null && !is_string($path)) {
+                            throw new RuntimeException('アイキャッチ画像の参照が正しくありません。');
+                        }
+                        $entry['data']['featured_media_path'] = $path === null ? null : $rewriter->mediaPath(MediaValidator::path($path));
+                    }
                 }
                 $plan[$type][] = $entry;
             }
@@ -128,7 +152,19 @@ class ContentImporter
                 if ($entry['action'] === 'skip') { continue; }
                 if ($type === 'posts') {
                     $categoryId = $entry['category_id'] === null ? null : $categoryIdMap[$entry['category_id']];
-                    $repository->savePost($entry['data'], $userId, $categoryId, $entry['action'] === 'update');
+                    $data = $entry['data'];
+                    if (array_key_exists('featured_media_path', $data)) {
+                        $path = $data['featured_media_path'];
+                        if ($path === null) {
+                            $data['featured_media_id'] = null;
+                        } else {
+                            $media = $lookup->find('media', $path);
+                            if (($media['file_type'] ?? '') === 'image') {
+                                $data['featured_media_id'] = (int)$media['id'];
+                            }
+                        }
+                    }
+                    $repository->savePost($data, $userId, $categoryId, $entry['action'] === 'update');
                 } else { $repository->savePage($entry['data'], $userId, $entry['action'] === 'update'); }
                 $result[$type]++;
             }
@@ -188,7 +224,8 @@ class ContentImporter
      */
     private function requiredString(
         mixed $value,
-        string $label
+        string $label,
+        int $limit = 255
     ): string {
         if (!is_string($value)) { throw new RuntimeException($label . 'は文字列で指定してください。'); }
         $value = trim($value);
@@ -200,6 +237,10 @@ class ContentImporter
             );
         }
 
+        if (!preg_match('/\A.{1,' . $limit . '}\z/us', $value)) {
+            throw new RuntimeException($label . 'は' . $limit . '文字以内で指定してください。');
+        }
+
         return $value;
     }
 
@@ -209,9 +250,7 @@ class ContentImporter
     private function status(
         mixed $value
     ): string {
-        $status = trim(
-            (string)$value
-        );
+        $status = is_string($value) ? trim($value) : '';
 
         if (
             !in_array(
@@ -238,9 +277,10 @@ class ContentImporter
         mixed $value,
         ?string $fallback = null
     ): string {
-        $value = trim(
-            (string)$value
-        );
+        if ($value !== null && !is_string($value)) {
+            throw new RuntimeException('コンテンツの日時が正しくありません。');
+        }
+        $value = trim($value ?? '');
 
         if ($value === '') {
             return $fallback

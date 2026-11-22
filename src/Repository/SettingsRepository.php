@@ -3,6 +3,8 @@
 namespace NexaPressImportExport\Repository;
 
 use DateTimeZone;
+use NexaPressImportExport\Support\PrivateStorage;
+use NexaPressImportExport\Support\SafePath;
 use RuntimeException;
 
 class SettingsRepository
@@ -12,25 +14,15 @@ class SettingsRepository
      */
     public function export(): array
     {
-        return [
-            'general' =>
-                $this->load(
-                    'general',
-                    $this->generalDefaults()
-                ),
-
-            'url' =>
-                $this->load(
-                    'url',
-                    $this->urlDefaults()
-                ),
-
-            'debug' =>
-                $this->load(
-                    'debug',
-                    $this->debugDefaults()
-                ),
+        $sections = [
+            'general' => $this->generalDefaults(),
+            'url' => $this->urlDefaults(),
+            'debug' => $this->debugDefaults(),
         ];
+        foreach ($sections as $name => $defaults) {
+            $sections[$name] = array_intersect_key($this->load($name, $defaults), $defaults);
+        }
+        return $sections;
     }
 
     /*
@@ -40,7 +32,9 @@ class SettingsRepository
         array $settings
     ): int {
         $validated = $this->validate($settings);
-        foreach ($validated as $section => $values) { $this->write($section, $values); }
+        foreach ($validated as $section => $values) {
+            $this->write($section, array_replace($this->load($section, []), $values));
+        }
         return count($validated);
     }
 
@@ -97,11 +91,7 @@ class SettingsRepository
         string $name,
         array $defaults
     ): array {
-        $filePath =
-            BASE_PATH
-            . '/config/'
-            . $name
-            . '.php';
+        $filePath = SafePath::file(BASE_PATH, 'config/' . $name . '.php', false);
 
         if (!is_file($filePath)) {
             return $defaults;
@@ -278,70 +268,18 @@ class SettingsRepository
     /*
      * 設定ファイルを安全に保存
      */
-    private function write(
-        string $name,
-        array $settings
-    ): void {
-        $configDirectory =
-            BASE_PATH . '/config';
-
-        if (
-            !is_dir($configDirectory) ||
-            !is_writable(
-                $configDirectory
-            )
-        ) {
-            throw new RuntimeException(
-                '設定フォルダへ書き込めません。'
-            );
+    private function write(string $name, array $settings): void
+    {
+        $directory = SafePath::directory(BASE_PATH, 'config', false);
+        if (!is_dir($directory) || !is_writable($directory)) {
+            throw new RuntimeException('設定フォルダへ書き込めません。');
         }
-
-        $filePath =
-            $configDirectory
-            . '/'
-            . $name
-            . '.php';
-
-        $temporaryPath =
-            $filePath
-            . '.tmp-'
-            . bin2hex(
-                random_bytes(6)
-            );
-
-        $contents =
-            "<?php\n\nreturn "
-            . var_export(
-                $settings,
-                true
-            )
-            . ";\n";
-
-        $result = file_put_contents(
-            $temporaryPath,
-            $contents,
-            LOCK_EX
-        );
-
-        if ($result === false) {
-            throw new RuntimeException(
-                '設定ファイルを作成できませんでした。'
-            );
-        }
-
-        if (
-            !rename(
-                $temporaryPath,
-                $filePath
-            )
-        ) {
-            unlink(
-                $temporaryPath
-            );
-
-            throw new RuntimeException(
-                '設定ファイルを保存できませんでした。'
-            );
+        $file = $name . '.php';
+        $target = SafePath::file($directory, $file, false);
+        $mode = is_file($target) ? fileperms($target) & 0777 : 0644;
+        PrivateStorage::atomic($directory, $file, "<?php\n\nreturn " . var_export($settings, true) . ";\n");
+        if (DIRECTORY_SEPARATOR !== '\\') {
+            chmod($target, $mode);
         }
     }
 

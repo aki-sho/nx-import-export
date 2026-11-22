@@ -10,6 +10,12 @@ namespace app\Core {
         public static function user(): array { return ['id' => 1]; }
     }
 
+    // End-to-end tests use the CMS implementation. These tests isolate package and database logic.
+    class HtmlSanitizer
+    {
+        public static function sanitize(?string $html): string { return trim((string)$html); }
+    }
+
     class Database
     {
         private static ?\PDO $connection = null;
@@ -22,7 +28,7 @@ namespace app\Core {
                 self::$connection->exec('CREATE TABLE media (id INTEGER PRIMARY KEY, title TEXT, description TEXT, original_name TEXT, file_name TEXT, file_path TEXT, mime_type TEXT, file_size INTEGER, file_type TEXT, user_id INTEGER, created_at TEXT, updated_at TEXT)');
                 self::$connection->exec('CREATE TABLE categories (id INTEGER PRIMARY KEY, name TEXT, slug TEXT, created_at TEXT, updated_at TEXT)');
                 foreach (['posts', 'pages'] as $table) {
-                    self::$connection->exec("CREATE TABLE $table (id INTEGER PRIMARY KEY, title TEXT, slug TEXT, content TEXT, status TEXT, user_id INTEGER, category_id INTEGER, published_at TEXT, created_at TEXT, updated_at TEXT)");
+                    self::$connection->exec("CREATE TABLE $table (id INTEGER PRIMARY KEY, title TEXT, slug TEXT, content TEXT, status TEXT, user_id INTEGER, category_id INTEGER, published_at TEXT, created_at TEXT, updated_at TEXT, excerpt TEXT, featured_media_id INTEGER, deleted_at TEXT)");
                 }
             }
 

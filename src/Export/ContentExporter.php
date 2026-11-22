@@ -4,6 +4,7 @@ namespace NexaPressImportExport\Export;
 
 use NexaPressImportExport\Repository\ContentRepository;
 use NexaPressImportExport\Support\Json;
+use NexaPressImportExport\Support\Limits;
 use RuntimeException;
 
 class ContentExporter
@@ -53,6 +54,10 @@ class ContentExporter
             $this->pages(
                 $repository->pages()
             );
+
+        if (count($categories) + count($posts) + count($pages) > (int)(Limits::all()['max_content_items'] ?? 10000)) {
+            throw new RuntimeException('コンテンツの合計件数が制限を超えています。');
+        }
 
         /*
          * カテゴリーを書き出す
@@ -239,6 +244,9 @@ class ContentExporter
                         ? (int)$categoryId
                         : null,
 
+                'excerpt' => (string)($row['excerpt'] ?? ''),
+                'featured_media_path' => $this->nullableString($row['featured_media_path'] ?? null),
+
                 'published_at' =>
                     $this->nullableString(
                         $row['published_at']
@@ -271,7 +279,7 @@ class ContentExporter
         $items = [];
 
         foreach ($rows as $row) {
-            if (!is_array($row)) {
+            if (!is_array($row) || !empty($row['deleted_at'])) {
                 continue;
             }
 
