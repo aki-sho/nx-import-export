@@ -11,10 +11,18 @@ use Throwable;
 final class CsvContent
 {
     public const MODE = 'csv';
+    public const CATEGORY_MODE = 'csv_categories';
+    private const CATEGORY_REQUIRED = ['name', 'slug'];
+    private const CATEGORY_HEADERS = ['name', 'slug', 'nx_format'];
     private const REQUIRED = ['type', 'title', 'slug', 'content'];
     private const HEADERS = ['type', 'title', 'slug', 'content', 'excerpt', 'category_slug', 'category_name', 'nx_format'];
     private const FORMAT_VERSION = '1';
     private const TEXT_PREFIX = '~';
+
+    public static function isMode(string $mode): bool
+    {
+        return $mode === self::MODE || $mode === self::CATEGORY_MODE;
+    }
 
     public static function uploadLimit(array $limits): int
     {
@@ -32,40 +40,9 @@ final class CsvContent
 
     public static function read(string $path, array $limits): array
     {
-        $columns = [];
         $documents = ['categories' => [], 'posts' => [], 'pages' => []];
         $categories = [];
-        foreach (CsvReader::rows($path, self::byteLimit($limits), self::rowLimit($limits) + 1, count(self::HEADERS)) as $number => $row) {
-            if ($number === 1) {
-                if (array_diff(self::REQUIRED, $row) !== [] || array_diff($row, self::HEADERS) !== []
-                    || count(array_unique($row)) !== count($row)) {
-                    throw new RuntimeException('CSVの見出しが正しくありません。type、title、slug、contentが必要です。');
-                }
-                $columns = $row;
-                continue;
-            }
-            if (count($row) !== count($columns)) {
-                throw new RuntimeException("CSVの{$number}行目の列数が見出しと一致しません。");
-            }
-            $item = array_combine($columns, $row);
-            $encoded = isset($item['nx_format']);
-            if ($encoded && $item['nx_format'] !== self::FORMAT_VERSION) {
-                throw new RuntimeException("CSVの{$number}行目のNexaPress形式番号を確認してください。");
-            }
-            unset($item['nx_format']);
-            foreach ($item as &$cell) {
-                if (preg_match('//u', $cell) !== 1 || preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $cell) === 1) {
-                    throw new RuntimeException("CSVの{$number}行目をUTF-8の文字列で入力してください。");
-                }
-                if ($encoded && str_starts_with($cell, self::TEXT_PREFIX)) {
-                    $original = substr($cell, 1);
-                    if (self::encodeCell($original) === $cell) {
-                        $cell = $original;
-                    }
-                }
-            }
-            unset($cell);
-
+        foreach (self::items($path, $limits, self::REQUIRED, self::HEADERS) as $number => $item) {
             $type = match ($item['type']) {
                 'post' => 'posts',
                 'page' => 'pages',
@@ -105,6 +82,59 @@ final class CsvContent
         return $documents;
     }
 
+    public static function readCategories(string $path, array $limits): array
+    {
+        $categories = [];
+        foreach (self::items($path, $limits, self::CATEGORY_REQUIRED, self::CATEGORY_HEADERS) as $number => $item) {
+            $name = trim($item['name']);
+            if ($name === '') {
+                throw new RuntimeException("CSVの{$number}行目のカテゴリ名を入力してください。");
+            }
+            $categories[] = ['id' => count($categories) + 1, 'name' => $name, 'slug' => self::slug($item['slug'], $number)];
+        }
+        if ($categories === []) {
+            throw new RuntimeException('CSVに取り込むカテゴリがありません。');
+        }
+        return $categories;
+    }
+
+    private static function items(string $path, array $limits, array $required, array $headers): \Generator
+    {
+        $columns = [];
+        foreach (CsvReader::rows($path, self::byteLimit($limits), self::rowLimit($limits) + 1, count($headers)) as $number => $row) {
+            if ($number === 1) {
+                if (array_diff($required, $row) !== [] || array_diff($row, $headers) !== []
+                    || count(array_unique($row)) !== count($row)) {
+                    throw new RuntimeException('CSVの見出しが正しくありません。' . implode('、', $required) . 'が必要です。');
+                }
+                $columns = $row;
+                continue;
+            }
+            if (count($row) !== count($columns)) {
+                throw new RuntimeException("CSVの{$number}行目の列数が見出しと一致しません。");
+            }
+            $item = array_combine($columns, $row);
+            $encoded = isset($item['nx_format']);
+            if ($encoded && $item['nx_format'] !== self::FORMAT_VERSION) {
+                throw new RuntimeException("CSVの{$number}行目のNexaPress形式番号を確認してください。");
+            }
+            unset($item['nx_format']);
+            foreach ($item as &$cell) {
+                if (preg_match('//u', $cell) !== 1 || preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $cell) === 1) {
+                    throw new RuntimeException("CSVの{$number}行目をUTF-8の文字列で入力してください。");
+                }
+                if ($encoded && str_starts_with($cell, self::TEXT_PREFIX)) {
+                    $original = substr($cell, 1);
+                    if (self::encodeCell($original) === $cell) {
+                        $cell = $original;
+                    }
+                }
+            }
+            unset($cell);
+            yield $number => $item;
+        }
+    }
+
     public static function export(string $scope, array $limits): array
     {
         $types = match ($scope) {
@@ -112,10 +142,38 @@ final class CsvContent
             'post', 'page' => [$scope],
             default => throw new RuntimeException('CSVの出力対象を選択してください。'),
         };
+        return self::write('content', self::HEADERS, self::contentRows($types), $limits);
+    }
 
+    public static function exportCategories(array $limits): array
+    {
+        return self::write('categories', self::CATEGORY_HEADERS, self::categoryRows(), $limits);
+    }
+
+    private static function contentRows(array $types): \Generator
+    {
+        $repository = new ContentRepository();
+        foreach ($types as $type) {
+            foreach ($repository->csvRows($type) as $row) {
+                yield [$type, (string)$row['title'], (string)$row['slug'], (string)$row['content'],
+                    (string)($row['excerpt'] ?? ''), (string)($row['category_slug'] ?? ''),
+                    (string)($row['category_name'] ?? ''), self::FORMAT_VERSION];
+            }
+        }
+    }
+
+    private static function categoryRows(): \Generator
+    {
+        foreach ((new ContentRepository())->csvRows('category') as $row) {
+            yield [(string)$row['name'], (string)$row['slug'], self::FORMAT_VERSION];
+        }
+    }
+
+    private static function write(string $scope, array $headers, iterable $rows, array $limits): array
+    {
         TempDirectory::cleanup((int)($limits['temporary_file_lifetime'] ?? 3600));
         $directory = TempDirectory::create();
-        $name = 'nexapress-content-' . gmdate('Ymd-His') . '.csv';
+        $name = 'nexapress-' . $scope . '-' . gmdate('Ymd-His') . '.csv';
         $path = $directory . '/' . $name;
 
         try {
@@ -124,26 +182,19 @@ final class CsvContent
                 throw new RuntimeException('CSVファイルを作成できませんでした。');
             }
             try {
-                if (fwrite($handle, "\xEF\xBB\xBF") !== 3 || fputcsv($handle, self::HEADERS, ',', '"', '') === false) {
+                if (fwrite($handle, "\xEF\xBB\xBF") !== 3 || fputcsv($handle, $headers, ',', '"', '') === false) {
                     throw new RuntimeException('CSVの見出しを保存できませんでした。');
                 }
-                $repository = new ContentRepository();
                 $bytes = (int)ftell($handle);
                 $count = 0;
-                foreach ($types as $type) {
-                    foreach ($repository->csvRows($type) as $row) {
-                        $written = fputcsv($handle, array_map(static fn(string $cell): string => self::encodeCell($cell), [
-                            $type, (string)$row['title'], (string)$row['slug'], (string)$row['content'],
-                            (string)($row['excerpt'] ?? ''), (string)($row['category_slug'] ?? ''),
-                            (string)($row['category_name'] ?? ''), self::FORMAT_VERSION,
-                        ]), ',', '"', '');
-                        if ($written === false) {
-                            throw new RuntimeException('CSVの書き出しに失敗しました。');
-                        }
-                        $bytes += $written;
-                        if (++$count > self::rowLimit($limits) || $bytes > self::byteLimit($limits)) {
-                            throw new RuntimeException('CSVの出力上限を超えています。出力対象を絞るか、ZIP形式を使用してください。');
-                        }
+                foreach ($rows as $row) {
+                    $written = fputcsv($handle, array_map([self::class, 'encodeCell'], $row), ',', '"', '');
+                    if ($written === false) {
+                        throw new RuntimeException('CSVの書き出しに失敗しました。');
+                    }
+                    $bytes += $written;
+                    if (++$count > self::rowLimit($limits) || $bytes > self::byteLimit($limits)) {
+                        throw new RuntimeException('CSVの出力上限を超えています。出力対象を絞るか、ZIP形式を使用してください。');
                     }
                 }
                 if (!fflush($handle)) {

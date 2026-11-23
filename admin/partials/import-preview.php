@@ -2,7 +2,10 @@
 use app\Core\Csrf;
 if (!defined('NX_IMPORT_EXPORT_PATH') || !is_array($preview ?? null)) { return; }
 $summary = $preview['summary'];
-$types = ['categories' => 'カテゴリー', 'posts' => '投稿', 'pages' => '固定ページ', 'media' => 'メディア'];
+$categoriesOnly = !empty($modes[$preview['mode']]['categories_only']);
+$types = $categoriesOnly
+    ? ['categories' => 'カテゴリ']
+    : ['categories' => 'カテゴリー', 'posts' => '投稿', 'pages' => '固定ページ', 'media' => 'メディア'];
 $actions = ['add' => '追加', 'update' => '上書き', 'skip' => 'スキップ'];
 $policies = ['overwrite' => '上書き', 'skip' => 'スキップ', 'rename' => '別名で追加'];
 $fields = ['name' => '名前', 'title' => 'タイトル', 'content' => '本文', 'status' => '公開状態', 'slug' => 'スラッグ', 'published_at' => '公開日時', 'created_at' => '作成日時', 'updated_at' => '更新日時', 'description' => '説明', 'original_name' => '元ファイル名', 'file_name' => '保存名', 'file_path' => '保存先', 'mime_type' => '形式', 'file_size' => '容量', 'file_type' => '種類'];
@@ -52,13 +55,15 @@ $expires = (new DateTimeImmutable('@' . $preview['expires_at']))->setTimezone(ne
                 </tbody></table></div>
             <?php endif; ?>
         <?php endif; ?>
-        <h3>URL・メディア参照の置換</h3>
-        <p><?= e((string)$summary['urls']['count']) ?>箇所を置換します。スキップするデータは変更しません。</p>
-        <?php if ($preview['options']['url_from'] !== ''): ?><p><code><?= e($preview['options']['url_from']) ?></code> → <code><?= e($preview['options']['url_to']) ?></code></p><?php endif; ?>
-        <?php if ($summary['urls']['samples'] !== []): ?>
-            <details><summary>置換例を確認（最大50項目）</summary>
-                <?php foreach ($summary['urls']['samples'] as $sample): ?><div class="nx-import-export-url-example"><strong><?= e($sample['label']) ?></strong><pre><?= e($sample['before']) ?></pre><span>↓</span><pre><?= e($sample['after']) ?></pre></div><?php endforeach; ?>
-            </details>
+        <?php if (!$categoriesOnly): ?>
+            <h3>URL・メディア参照の置換</h3>
+            <p><?= e((string)$summary['urls']['count']) ?>箇所を置換します。スキップするデータは変更しません。</p>
+            <?php if ($preview['options']['url_from'] !== ''): ?><p><code><?= e($preview['options']['url_from']) ?></code> → <code><?= e($preview['options']['url_to']) ?></code></p><?php endif; ?>
+            <?php if ($summary['urls']['samples'] !== []): ?>
+                <details><summary>置換例を確認（最大50項目）</summary>
+                    <?php foreach ($summary['urls']['samples'] as $sample): ?><div class="nx-import-export-url-example"><strong><?= e($sample['label']) ?></strong><pre><?= e($sample['before']) ?></pre><span>↓</span><pre><?= e($sample['after']) ?></pre></div><?php endforeach; ?>
+                </details>
+            <?php endif; ?>
         <?php endif; ?>
         <p class="nx-import-export-help">実行直前に変更前のデータを自動バックアップします。確認後に対象データが変わった場合は処理を中止します。</p>
     </div>

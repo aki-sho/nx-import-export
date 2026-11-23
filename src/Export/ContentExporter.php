@@ -13,7 +13,8 @@ class ContentExporter
      * コンテンツをJSONへ出力
      */
     public function export(
-        string $packageDirectory
+        string $packageDirectory,
+        bool $categoriesOnly = false
     ): array {
         $dataDirectory =
             rtrim(
@@ -45,15 +46,8 @@ class ContentExporter
                 $repository->categories()
             );
 
-        $posts =
-            $this->posts(
-                $repository->posts()
-            );
-
-        $pages =
-            $this->pages(
-                $repository->pages()
-            );
+        $posts = $categoriesOnly ? [] : $this->posts($repository->posts());
+        $pages = $categoriesOnly ? [] : $this->pages($repository->pages());
 
         if (count($categories) + count($posts) + count($pages) > (int)(Limits::all()['max_content_items'] ?? 10000)) {
             throw new RuntimeException('コンテンツの合計件数が制限を超えています。');
@@ -72,6 +66,10 @@ class ContentExporter
                 ),
             ]
         );
+
+        if ($categoriesOnly) {
+            return ['categories' => count($categories), 'posts' => 0, 'pages' => 0];
+        }
 
         /*
          * 投稿を書き出す

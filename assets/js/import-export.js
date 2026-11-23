@@ -198,13 +198,31 @@
 
     const importUpload = root.querySelector('form[action$="/preview"]');
     if (importUpload) {
+        const contentOptions = importUpload.querySelector("[data-nx-content-options]");
+        const conflictLegend = importUpload.querySelector("[data-nx-conflict-legend]");
+        const conflictDefault = importUpload.querySelector("[data-nx-conflict-default]");
+        const contentReferenceHelp = importUpload.querySelector("[data-nx-content-reference-help]");
+        const urlOptions = importUpload.querySelector("[data-nx-url-options]");
+        const debugOption = importUpload.querySelector("[data-nx-debug-option]");
+
         const updateOptions = () => {
-            const mode = importUpload.querySelector('input[name="mode"]:checked')?.value;
-            const contentOptions = importUpload.querySelector("[data-nx-content-options]");
-            const debugOption = importUpload.querySelector("[data-nx-debug-option]");
+            const selectedMode = importUpload.querySelector('input[name="mode"]:checked');
+            const mode = selectedMode?.value;
+            const categoriesOnly = selectedMode?.hasAttribute("data-nx-categories-only") ?? false;
             if (contentOptions) {
                 contentOptions.hidden = mode === "settings";
                 contentOptions.disabled = mode === "settings";
+                conflictLegend.textContent = categoriesOnly
+                    ? "同じスラッグがある場合"
+                    : "同じスラッグ・メディア保存先がある場合";
+                conflictDefault.textContent = mode === "csv" || categoriesOnly
+                    ? "初期設定では、重複した項目をスキップします。"
+                    : "初期設定では、既存データを上書きします。";
+                contentReferenceHelp.hidden = categoriesOnly;
+            }
+            if (urlOptions) {
+                urlOptions.hidden = categoriesOnly;
+                urlOptions.disabled = categoriesOnly;
             }
             if (debugOption) {
                 debugOption.hidden = mode !== "settings";

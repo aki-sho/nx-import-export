@@ -29,7 +29,11 @@ class ImportPlanner
             }
         }
         $rewriter = new UrlRewriter($options, $paths);
-        if (!empty($modes[$mode]['content'])) {
+        if (!empty($modes[$mode]['categories_only'])) {
+            $plan['content'] = (new ContentImporter())->prepareCategories(
+                $directory, $userId, $limits, $options, CsvContent::isMode($mode)
+            );
+        } elseif (!empty($modes[$mode]['content'])) {
             $importer = new ContentImporter();
             $plan['content'] = $mode === CsvContent::MODE
                 ? $importer->prepareCsv($directory, $userId, $limits, $options, $rewriter)

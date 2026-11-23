@@ -43,7 +43,7 @@ class ExportController
             );
 
             /*
-             * エクスポートZIPを作成
+             * エクスポートファイルを作成
              */
             $service = new ExportService();
 
@@ -114,7 +114,7 @@ class ExportController
                 ob_end_clean();
             }
 
-            header($mode === CsvContent::MODE
+            header(CsvContent::isMode($mode)
                 ? 'Content-Type: text/csv; charset=UTF-8'
                 : 'Content-Type: application/zip');
 

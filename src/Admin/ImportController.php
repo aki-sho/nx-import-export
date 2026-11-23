@@ -8,7 +8,6 @@ use app\Core\Permission;
 use app\Core\RequestSize;
 use NexaPressImportExport\Support\CsvContent;
 use NexaPressImportExport\Import\BackupService;
-use NexaPressImportExport\Import\ImportOptions;
 use NexaPressImportExport\Import\ImportService;
 use NexaPressImportExport\Import\PreviewStore;
 use NexaPressImportExport\Support\Limits;
@@ -26,7 +25,7 @@ class ImportController
             if (($_FILES['import_file']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE && isset($_POST['preview_token'])) {
                 $store = new PreviewStore();
                 $existing = $store->get($this->identifier('preview_token'), $this->userId());
-                if (($mode === CsvContent::MODE) !== ($existing['mode'] === CsvContent::MODE)) {
+                if (CsvContent::isMode($mode) !== CsvContent::isMode($existing['mode'])) {
                     throw new RuntimeException('形式を変更する場合は、新しいファイルを選択してください。');
                 }
                 $path = $store->packagePath($existing);
@@ -35,12 +34,14 @@ class ImportController
                 $path = $upload['tmp_name'];
             }
             $conflict = $_POST['conflict'] ?? '';
-            $options = ImportOptions::normalize([
-                'conflict' => $conflict === '' ? ($mode === CsvContent::MODE ? 'skip' : 'overwrite') : $conflict,
+            $options = [
                 'url_from' => $_POST['url_from'] ?? '',
                 'url_to' => $_POST['url_to'] ?? '',
                 'import_debug' => ($_POST['import_debug'] ?? '') === '1',
-            ]);
+            ];
+            if ($conflict !== '') {
+                $options['conflict'] = $conflict;
+            }
             $preview = (new ImportService())->preview($path, $mode, $options);
             $_SESSION['nx_import_export_preview'] = $preview['id'];
             Notice::success('プレビューを作成しました。変更内容を確認してから実行してください。');

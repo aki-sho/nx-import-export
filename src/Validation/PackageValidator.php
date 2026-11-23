@@ -91,6 +91,7 @@ class PackageValidator
             !in_array(
                 $mode,
                 [
+                    'categories',
                     'content',
                     'content_media',
                     'settings',
@@ -130,13 +131,16 @@ class PackageValidator
         );
 
         $allowedModes = [
+            'categories' => ['categories'],
             'content' => [
                 'content',
+                'categories',
             ],
 
             'content_media' => [
                 'content',
                 'content_media',
+                'categories',
             ],
 
             'settings' => [
@@ -217,6 +221,13 @@ class PackageValidator
             'data/pages.json',
             'data/posts.json',
         ];
+
+        if ($mode === 'categories') {
+            if ($files !== ['data/categories.json']) {
+                throw new RuntimeException('カテゴリパッケージの構成が正しくありません。');
+            }
+            return;
+        }
 
         if ($mode === 'content') {
             $expected = $contentFiles;

@@ -12,6 +12,7 @@ use NexaPressImportExport\Support\Json;
 use NexaPressImportExport\Support\Limits;
 use NexaPressImportExport\Support\OperationLock;
 use NexaPressImportExport\Support\PrivateStorage;
+use NexaPressImportExport\Validation\ExportValidator;
 use RuntimeException;
 use Throwable;
 
@@ -85,7 +86,7 @@ class ImportService
 
     private function source(PackageReader $reader, string $file, string $mode, ?array &$package): string
     {
-        if ($mode === CsvContent::MODE) {
+        if (CsvContent::isMode($mode)) {
             return $file;
         }
         $package = $reader->read($file, $mode);
@@ -94,8 +95,13 @@ class ImportService
 
     private function options(string $mode, array $options): array
     {
-        if ($mode === CsvContent::MODE) {
+        $categoriesOnly = !empty(ExportValidator::modes()[$mode]['categories_only']);
+        if ($categoriesOnly || CsvContent::isMode($mode)) {
             $options += ['conflict' => 'skip'];
+        }
+        if ($categoriesOnly) {
+            $options['url_from'] = $options['url_to'] = '';
+            $options['import_debug'] = false;
         }
         return ImportOptions::normalize($options);
     }

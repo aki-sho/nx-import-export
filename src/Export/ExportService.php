@@ -22,9 +22,11 @@ class ExportService
         $lock = OperationLock::acquire();
 
         try {
-            return $mode === CsvContent::MODE
-                ? CsvContent::export($csvScope, $this->limits())
-                : $this->createPackage($mode);
+            return match ($mode) {
+                CsvContent::MODE => CsvContent::export($csvScope, $this->limits()),
+                CsvContent::CATEGORY_MODE => CsvContent::exportCategories($this->limits()),
+                default => $this->createPackage($mode),
+            };
         } finally {
             $lock->release();
         }
@@ -48,6 +50,7 @@ class ExportService
         $modeSettings =
             $modes[$mode];
 
+        $categoriesOnly = !empty($modeSettings['categories_only']);
         $limits =
             $this->limits();
 
@@ -95,17 +98,11 @@ class ExportService
             /*
              * コンテンツを出力
              */
-            if (
-                !empty(
-                    $modeSettings['content']
-                )
-            ) {
+            if ($categoriesOnly || !empty($modeSettings['content'])) {
                 $exporter =
                     new ContentExporter();
 
-                $exporter->export(
-                    $packageDirectory
-                );
+                $exporter->export($packageDirectory, $categoriesOnly);
             }
 
             /*

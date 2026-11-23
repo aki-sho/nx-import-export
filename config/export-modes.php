@@ -4,6 +4,25 @@
  * エクスポート・インポートの処理モード
  */
 return [
+
+    'categories' => [
+        'label' => 'カテゴリのみ（ZIP）',
+        'description' => 'カテゴリ名とスラッグをZIPで移行します。',
+        'categories_only' => true,
+        'content' => false,
+        'media' => false,
+        'settings' => false,
+    ],
+
+    'csv_categories' => [
+        'label' => 'カテゴリのみ（CSV）',
+        'description' => 'カテゴリ名とスラッグをCSVで移行します。',
+        'categories_only' => true,
+        'content' => false,
+        'media' => false,
+        'settings' => false,
+    ],
+
     'csv' => [
         'label' => 'CSV（投稿・固定ページ）',
         'description' => '本文、タイトル、スラッグ、投稿のカテゴリなどを対象にします。',

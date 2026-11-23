@@ -105,24 +105,26 @@ $importOptions = $preview['options'] ?? ['conflict' => '', 'url_from' => '', 'ur
 
         <details>
             <summary>CSVの書式</summary>
-            <p>文字コードはUTF-8です。見出しに <code>type</code>、<code>title</code>、<code>slug</code>、<code>content</code> が必要です。</p>
+            <p>文字コードはUTF-8です。カテゴリのみの場合は、見出しに <code>name</code>（カテゴリ名）と <code>slug</code>（スラッグ）が必要です。</p>
+            <p>投稿・固定ページの場合は、見出しに <code>type</code>、<code>title</code>、<code>slug</code>、<code>content</code> が必要です。</p>
             <p><code>type</code> に投稿は <code>post</code>、固定ページは <code>page</code> を指定します。新規は下書きです。</p>
             <p>エクスポートしたCSVをひな形に使えます。表計算ソフトで編集する際はセルの文字数制限を確認してください。</p>
         </details>
 
         <fieldset data-nx-content-options>
-            <legend>同じスラッグ・メディア保存先がある場合</legend>
+            <legend data-nx-conflict-legend>同じスラッグ・メディア保存先がある場合</legend>
             <label for="nx-import-conflict">重複時の処理</label>
             <select id="nx-import-conflict" name="conflict">
-                <option value="" <?= $importOptions['conflict'] === '' ? 'selected' : '' ?>>形式の初期設定を使用（CSVはスキップ、ZIPは上書き）</option>
+                <option value="" <?= $importOptions['conflict'] === '' ? 'selected' : '' ?>>初期設定を使用</option>
                 <?php foreach (['overwrite' => '既存データを上書き', 'skip' => '既存データを残してスキップ', 'rename' => '別名で追加して両方を残す'] as $value => $label): ?>
                     <option value="<?= e($value) ?>" <?= $importOptions['conflict'] === $value ? 'selected' : '' ?>><?= e($label) ?></option>
                 <?php endforeach; ?>
             </select>
-            <p class="nx-import-export-help">別名で追加したカテゴリーの関連付けや、本文内のメディア参照も更新します。設定はプレビューを確認してから上書きします。</p>
+            <p class="nx-import-export-help" data-nx-conflict-default>初期設定では、カテゴリのみとCSVはスキップし、ほかのZIPは上書きします。</p>
+            <p class="nx-import-export-help" data-nx-content-reference-help>別名で追加したカテゴリーの関連付けや、本文内のメディア参照も更新します。設定はプレビューを確認してから上書きします。</p>
         </fieldset>
 
-        <fieldset>
+        <fieldset data-nx-url-options>
             <legend>移行時のURL置換（任意）</legend>
             <div class="nx-import-export-url-fields">
                 <div class="nx-import-export-field"><label for="nx-url-from">移行元のURL</label><input id="nx-url-from" name="url_from" type="url" placeholder="https://old.example.com" maxlength="2048" value="<?= e($importOptions['url_from']) ?>"></div>

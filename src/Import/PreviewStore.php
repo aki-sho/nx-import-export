@@ -25,7 +25,7 @@ class PreviewStore
         $maximum = max(1, (int)($limits['max_pending_previews'] ?? 3));
         $id = bin2hex(random_bytes(16));
         $directory = PrivateStorage::directory('previews', $id);
-        $csv = $mode === CsvContent::MODE;
+        $csv = CsvContent::isMode($mode);
         $filename = $csv ? 'package.csv' : 'package.zip';
         $maxBytes = $csv ? (int)$limits['max_csv_size'] : (int)($limits['max_package_size'] ?? 104857600);
         try {
@@ -62,7 +62,7 @@ class PreviewStore
 
     public function packagePath(array $request): string
     {
-        $filename = $request['mode'] === CsvContent::MODE ? 'package.csv' : 'package.zip';
+        $filename = CsvContent::isMode($request['mode']) ? 'package.csv' : 'package.zip';
         $path = SafePath::file(PrivateStorage::directory('previews', $request['id'], false), $filename, false);
         $hash = $request['source_hash'] ?? $request['zip_hash'] ?? '';
         if (!is_file($path) || !hash_equals((string)$hash, (string)hash_file('sha256', $path))) {

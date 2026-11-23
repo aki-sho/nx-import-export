@@ -54,6 +54,7 @@ $inputIdPrefix =
                 type="radio"
                 name="<?= e($fieldName) ?>"
                 value="<?= e((string)$modeKey) ?>"
+                <?= empty($mode['categories_only']) ? '' : 'data-nx-categories-only' ?>
                 <?= $selectedMode === (string)$modeKey
                     ? 'checked'
                     : '' ?>

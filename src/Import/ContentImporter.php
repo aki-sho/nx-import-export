@@ -42,8 +42,7 @@ class ContentImporter
         $types = ['categories' => 'カテゴリー', 'posts' => '投稿', 'pages' => '固定ページ'];
         $documents = [];
         foreach ($types as $type => $label) {
-            $document = Json::read(rtrim($packageDirectory, '/\\') . '/data/' . $type . '.json', (int)($limits['max_json_size'] ?? 20971520));
-            $documents[$type] = $this->items($document, $label);
+            $documents[$type] = $this->readItems($packageDirectory, $type, $label, $limits);
         }
         return $this->prepareDocuments($documents, $userId, $limits, $options, $rewriter, false);
     }
@@ -56,6 +55,26 @@ class ContentImporter
         UrlRewriter $rewriter
     ): array {
         return $this->prepareDocuments(CsvContent::read($path, $limits), $userId, $limits, $options, $rewriter, true);
+    }
+
+    public function prepareCategories(
+        string $source,
+        int $userId,
+        array $limits,
+        array $options,
+        bool $fromCsv
+    ): array {
+        $categories = $fromCsv ? CsvContent::readCategories($source, $limits)
+            : $this->readItems($source, 'categories', 'カテゴリー', $limits);
+        return $this->prepareDocuments(
+            ['categories' => $categories, 'posts' => [], 'pages' => []], $userId, $limits, $options, null, false
+        );
+    }
+
+    private function readItems(string $directory, string $type, string $label, array $limits): array
+    {
+        $document = Json::read(rtrim($directory, '/\\') . '/data/' . $type . '.json', (int)($limits['max_json_size'] ?? 20971520));
+        return $this->items($document, $label);
     }
 
     private function prepareDocuments(

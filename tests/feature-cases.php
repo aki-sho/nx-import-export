@@ -2,17 +2,21 @@
 
 use app\Core\Database;
 use NexaPressImportExport\Admin\ImportController;
+use NexaPressImportExport\Export\ExportService;
 use NexaPressImportExport\Import\BackupService;
 use NexaPressImportExport\Import\ImportOptions;
 use NexaPressImportExport\Import\ImportService;
 use NexaPressImportExport\Import\PreviewStore;
 use NexaPressImportExport\Import\UrlRewriter;
 use NexaPressImportExport\Package\PackageBuilder;
+use NexaPressImportExport\Package\PackageReader;
 use NexaPressImportExport\Repository\ContentRepository;
 use NexaPressImportExport\Repository\ImportRepository;
 use NexaPressImportExport\Repository\SettingsRepository;
+use NexaPressImportExport\Support\CsvContent;
 use NexaPressImportExport\Support\Json;
 use NexaPressImportExport\Support\PrivateStorage;
+use NexaPressImportExport\Support\TempDirectory;
 
 if (!defined('NX_IE_RUN_FEATURES')) { exit; }
 
@@ -464,4 +468,107 @@ test('CSV checks byte and column limits and preserves published overwrite metada
     file_put_contents($path, "type,title,slug,content\n" . str_repeat(',', 8));
     rejects(fn() => $service->preview($path, 'csv'), '列数が上限');
     check($lookup->find('posts', 'csv-boundary')['content'] === '<p>updated</p>', 'Invalid CSV changed the published post');
+});
+
+test('category CSV round-trips names and applies only the selected category conflict policy', function () use ($root) {
+    $service = new ImportService();
+    $lookup = new ImportRepository();
+    $slug = 'exchange-existing';
+    $service->import(featurePackage(
+        [featurePost('exchange-owned-post', 'original', 1)],
+        [['id' => 1, 'name' => '元の分類', 'slug' => $slug]],
+        [],
+        [featurePost('exchange-owned-page')]
+    ), 'content');
+    $original = $lookup->find('categories', $slug);
+    $post = $lookup->find('posts', 'exchange-owned-post');
+    $page = $lookup->find('pages', 'exchange-owned-page');
+
+    $path = $root . '/categories.csv';
+    $name = '~分類, "見本"';
+    $csv = fopen($path, 'wb');
+    fputcsv($csv, ['name', 'slug'], ',', '"', '');
+    fputcsv($csv, ['変更後の分類', $slug], ',', '"', '');
+    fputcsv($csv, [$name, '試験カテゴリ'], ',', '"', '');
+    fclose($csv);
+
+    $preview = $service->preview($path, CsvContent::CATEGORY_MODE);
+    check($preview['summary']['counts']['categories'] === ['add' => 1, 'update' => 0, 'skip' => 1], 'Category CSV did not preview a new and duplicate slug');
+    check($lookup->find('categories', '試験カテゴリ') === null, 'Category CSV preview wrote data');
+    $installed = $service->confirm($preview['id']);
+    check($installed['categories'] === 1 && $installed['skipped'] === 1 && $installed['posts'] === 0 &&
+        $installed['pages'] === 0, 'Category CSV applied a non-category operation');
+    check($lookup->find('categories', $slug) === $original, 'Default CSV policy modified the existing category');
+
+    $export = (new ExportService())->create(CsvContent::CATEGORY_MODE);
+    try {
+        $categories = array_column(CsvContent::readCategories($export['path'], []), 'name', 'slug');
+        check($categories['試験カテゴリ'] === $name && $categories[$slug] === $original['name'],
+            'Category CSV round trip changed a name or slug');
+        rejects(fn() => $service->preview($export['path'], CsvContent::MODE), '見出し');
+    } finally {
+        TempDirectory::remove(dirname($export['path']));
+    }
+
+    $preview = $service->preview($path, CsvContent::CATEGORY_MODE, ['conflict' => 'overwrite']);
+    $service->confirm($preview['id']);
+    $category = $lookup->find('categories', $slug);
+    check($category['name'] === '変更後の分類' && $category['id'] === $original['id'], 'Category overwrite lost the existing ID');
+    check($lookup->find('posts', 'exchange-owned-post') === $post && $lookup->find('pages', 'exchange-owned-page') === $page,
+        'Category overwrite modified the related post or a page');
+
+    $preview = $service->preview($path, CsvContent::CATEGORY_MODE, ['conflict' => 'rename']);
+    $renamed = $service->confirm($preview['id']);
+    check($renamed['categories'] === 2 && $lookup->find('categories', $slug . '-import-2')['name'] === '変更後の分類',
+        'Category CSV could not create a separate category');
+    (new BackupService())->restore($renamed['backup_id'], 1);
+    check($lookup->find('categories', $slug . '-import-2') === null, 'Restoring the category backup did not remove the added category');
+});
+
+test('category ZIP contains only categories and imports from both current and existing export modes', function () use ($gif) {
+    $service = new ImportService();
+    $lookup = new ImportRepository();
+    $archives = ['zip-exchange-content' => [], 'zip-exchange-media' => ['category-exchange-reference.gif' => $gif]];
+    foreach ($archives as $slug => $media) {
+        $category = ['id' => 1, 'name' => 'ZIP分類', 'slug' => $slug];
+        $package = featurePackage(
+            [featurePost('zip-category-exchange-post', '', 1)],
+            [$category],
+            $media,
+            [featurePost('zip-category-exchange-page')]
+        );
+        $result = $service->import($package, 'categories');
+        check($result['categories'] === 1 && $result['posts'] === 0 && $result['pages'] === 0 && $result['media'] === 0,
+            'An existing content ZIP imported data other than categories');
+    }
+    check($lookup->find('posts', 'zip-category-exchange-post') === null &&
+        $lookup->find('pages', 'zip-category-exchange-page') === null, 'Category ZIP wrote an article');
+
+    $export = (new ExportService())->create('categories');
+    $reader = new PackageReader();
+    try {
+        $package = $reader->read($export['path'], 'categories');
+        try {
+            $files = $package['entries'];
+            sort($files);
+            check($files === ['checksums.json', 'data/categories.json', 'export-manifest.json'], 'Category ZIP included unexpected files');
+        } finally {
+            $reader->release($package);
+        }
+        rejects(fn() => $reader->read($export['path'], 'content'), '一致しません');
+        (new BackupService())->restore($result['backup_id'], 1);
+        check($lookup->find('categories', 'zip-exchange-media') === null, 'Category ZIP fixture is still present');
+        $preview = $service->preview($export['path'], 'categories');
+        $counts = $preview['summary']['counts']['categories'];
+        check($preview['options']['conflict'] === 'skip' && $counts['skip'] > 0 && $counts['add'] === 1,
+            'Category ZIP did not distinguish new and existing slugs');
+        check($service->confirm($preview['id'])['categories'] === 1 &&
+            $lookup->find('categories', 'zip-exchange-media')['name'] === 'ZIP分類', 'Category ZIP did not restore the missing category');
+
+        $preview = $service->preview($export['path'], 'categories');
+        $duplicates = $service->confirm($preview['id']);
+        check($duplicates['categories'] === 0, 'Category ZIP overwrote existing data by default');
+    } finally {
+        TempDirectory::remove(dirname($export['path']));
+    }
 });

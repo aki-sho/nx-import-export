@@ -79,7 +79,7 @@ class ImportValidator
             )
         );
 
-        if ($mode === CsvContent::MODE) {
+        if (CsvContent::isMode($mode)) {
             if ($extension !== 'csv' || !is_uploaded_file($temporaryName)) {
                 throw new RuntimeException('CSV形式のファイルを選択してください。');
             }
