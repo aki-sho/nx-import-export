@@ -9,6 +9,7 @@ $fields = ['name' => '名前', 'title' => 'タイトル', 'content' => '本文',
 $settingsLabels = ['general.site_title' => 'サイト名', 'general.timezone' => 'タイムゾーン', 'general.site_icon' => 'サイトアイコン', 'general.discourage_search_engines' => '検索エンジンへの非表示設定', 'url.site_url_mode' => '公開URL', 'url.post_url_type' => '投稿URL形式', 'url.page_url_type' => '固定ページURL形式', 'debug.enabled' => 'デバッグ'];
 $displayValue = static fn($value) => is_bool($value) ? ($value ? '有効' : '無効') : ($value === null ? '未設定' : (string)$value);
 $fields['owner'] = '所有者';
+$fields['category_id'] = 'カテゴリ';
 $expires = (new DateTimeImmutable('@' . $preview['expires_at']))->setTimezone(new DateTimeZone('Asia/Tokyo'))->format('H:i');
 ?>
 <section class="nx-import-export-card nx-import-export-review" aria-labelledby="nx-preview-heading">
@@ -22,6 +23,9 @@ $expires = (new DateTimeImmutable('@' . $preview['expires_at']))->setTimezone(ne
                 <div><strong><?= e($label) ?></strong><span>追加 <?= e((string)$counts['add']) ?> ／ 上書き <?= e((string)$counts['update']) ?> ／ スキップ <?= e((string)$counts['skip']) ?></span></div>
             <?php endforeach; ?>
         </div>
+        <?php if ($preview['mode'] === 'csv'): ?>
+            <p>新規に追加する投稿と固定ページは下書きになります。「公開中」と表示された項目の上書きは、公開サイトにも反映されます。</p>
+        <?php endif; ?>
         <?php if ($preview['mode'] === 'settings'): ?>
             <p>設定は差分を確認したうえで上書きします。デバッグ設定：<?= $preview['options']['import_debug'] ? '取り込む' : '取り込まない' ?>。</p>
         <?php endif; ?>
@@ -31,7 +35,7 @@ $expires = (new DateTimeImmutable('@' . $preview['expires_at']))->setTimezone(ne
                 <div class="nx-import-export-scroll">
                     <table class="nx-import-export-table"><thead><tr><th>対象</th><th>処理</th><th>元の識別子 → 取り込み先</th><th>変更する項目</th></tr></thead><tbody>
                     <?php foreach ($summary['items'] as $item): ?>
-                        <tr><td><?= e($types[$item['type']]) ?><br><?= e($item['title']) ?></td><td><?= e($actions[$item['action']]) ?><?= $item['conflict'] ? '（重複あり）' : '' ?></td>
+                        <tr><td><?= e($types[$item['type']]) ?><br><?= e($item['title']) ?></td><td><?= e($actions[$item['action']]) ?><?= $item['conflict'] ? '（重複あり）' : '' ?><?= !empty($item['replaces_published']) ? '（公開中）' : '' ?></td>
                             <td><code><?= e($item['source']) ?></code><?php if ($item['source'] !== $item['target']): ?><br>→ <code><?= e($item['target']) ?></code><?php endif; ?></td>
                             <td><?= e(implode('・', array_map(static fn($field) => $fields[$field] ?? $field, $item['changed']))) ?></td></tr>
                     <?php endforeach; ?>

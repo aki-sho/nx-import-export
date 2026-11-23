@@ -3,6 +3,7 @@
 namespace NexaPressImportExport\Export;
 
 use NexaPressImportExport\Package\PackageBuilder;
+use NexaPressImportExport\Support\CsvContent;
 use NexaPressImportExport\Support\TempDirectory;
 use NexaPressImportExport\Support\OperationLock;
 use NexaPressImportExport\Validation\ExportValidator;
@@ -15,12 +16,15 @@ class ExportService
      * エクスポートパッケージを作成
      */
     public function create(
-        string $mode
+        string $mode,
+        string $csvScope = 'all'
     ): array {
         $lock = OperationLock::acquire();
 
         try {
-            return $this->createPackage($mode);
+            return $mode === CsvContent::MODE
+                ? CsvContent::export($csvScope, $this->limits())
+                : $this->createPackage($mode);
         } finally {
             $lock->release();
         }

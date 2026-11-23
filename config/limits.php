@@ -43,6 +43,9 @@ return [
      */
     'max_content_items' => 10000,
 
+    'max_csv_size' => 20 * 1024 * 1024,
+    'max_csv_rows' => 1000,
+
     /*
      * プレビュー保存時間・ユーザーごとの保存件数
      */

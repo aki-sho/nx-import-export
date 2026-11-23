@@ -1,6 +1,7 @@
 <?php
 
 use app\Core\Csrf;
+use NexaPressImportExport\Support\CsvContent;
 
 /*
  * 拡張機能以外から直接実行された場合は終了
@@ -31,7 +32,7 @@ $maxPackageSizeMb =
 $fieldName = 'mode';
 $selectedMode = $preview['mode'] ?? 'content';
 $inputIdPrefix = 'nx-import-mode';
-$importOptions = $preview['options'] ?? ['conflict' => 'overwrite', 'url_from' => '', 'url_to' => '', 'import_debug' => false];
+$importOptions = $preview['options'] ?? ['conflict' => '', 'url_from' => '', 'url_to' => '', 'import_debug' => false];
 ?>
 
 <?php if (($managementError ?? '') !== ''): ?><div class="nx-import-export-notice is-error" role="alert"><?= e($managementError) ?></div><?php endif; ?>
@@ -42,8 +43,7 @@ $importOptions = $preview['options'] ?? ['conflict' => 'overwrite', 'url_from' =
         <h2>インポート</h2>
 
         <p>
-            NX Import Exportで作成した
-            ZIPファイルを検証し、変更内容をプレビューします。
+            CSVまたはNX Import ExportのZIPを読み込み、変更内容をプレビューします。
         </p>
     </div>
 
@@ -76,14 +76,14 @@ $importOptions = $preview['options'] ?? ['conflict' => 'overwrite', 'url_from' =
                 id="nx-import-file"
                 type="file"
                 name="import_file"
-                accept=".zip,application/zip"
+                accept=".zip,.csv,application/zip,text/csv"
                 <?= $preview === null ? 'required' : '' ?>
             >
 
             <p class="nx-import-export-help">
-                ZIP形式・最大
-                <?= e((string)$maxPackageSizeMb) ?>MB
-                <?= $preview !== null ? '。ファイルを選択しなければ現在のZIPで再確認します。' : '' ?>
+                ZIPの設定上限 <?= e((string)$maxPackageSizeMb) ?> MB ／
+                CSVの受信上限 <?= e(number_format(CsvContent::uploadLimit($limits))) ?>バイト・最大<?= e((string)$limits['max_csv_rows']) ?>件
+                <?= $preview !== null ? '。ファイルを選択しなければ現在のファイルで再確認します。' : '' ?>
             </p>
         </div>
 
@@ -103,10 +103,18 @@ $importOptions = $preview['options'] ?? ['conflict' => 'overwrite', 'url_from' =
             ?>
         </fieldset>
 
+        <details>
+            <summary>CSVの書式</summary>
+            <p>文字コードはUTF-8です。見出しに <code>type</code>、<code>title</code>、<code>slug</code>、<code>content</code> が必要です。</p>
+            <p><code>type</code> に投稿は <code>post</code>、固定ページは <code>page</code> を指定します。新規は下書きです。</p>
+            <p>エクスポートしたCSVをひな形に使えます。表計算ソフトで編集する際はセルの文字数制限を確認してください。</p>
+        </details>
+
         <fieldset data-nx-content-options>
             <legend>同じスラッグ・メディア保存先がある場合</legend>
             <label for="nx-import-conflict">重複時の処理</label>
             <select id="nx-import-conflict" name="conflict">
+                <option value="" <?= $importOptions['conflict'] === '' ? 'selected' : '' ?>>形式の初期設定を使用（CSVはスキップ、ZIPは上書き）</option>
                 <?php foreach (['overwrite' => '既存データを上書き', 'skip' => '既存データを残してスキップ', 'rename' => '別名で追加して両方を残す'] as $value => $label): ?>
                     <option value="<?= e($value) ?>" <?= $importOptions['conflict'] === $value ? 'selected' : '' ?>><?= e($label) ?></option>
                 <?php endforeach; ?>

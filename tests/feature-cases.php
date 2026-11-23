@@ -381,3 +381,87 @@ test('dashboard shows preview and backup forms with escaped imported values and 
     check($xpath->query('//form[contains(@action,"/import")]//input[@name="preview_token"]')->length === 1, 'Confirmation missing token');
     check($xpath->query('//form[contains(@action,"/restore")]//input[@name="backup_id"]')->length > 0, 'Restore form missing backup ID');
 });
+
+
+test('CSV preserves quoted multiline text and neutralizes formula cells on export', function () {
+    global $root;
+    $path = $root . '/content.csv';
+    $handle = fopen($path, 'wb');
+    fputcsv($handle, ['type', 'title', 'slug', 'content', 'category_slug', 'category_name'], ',', '"', '');
+    $body = "<p>日本語, \"引用\"</p>\r\n<p>2行目😀</p>";
+    fputcsv($handle, ['post', '=1+1', 'csv-example', $body, 'csv-topic', 'CSV分類'], ',', '"', '');
+    fputcsv($handle, ['page', '~そのまま', 'csv-fixed-page', '<p>固定ページ</p>', '', ''], ',', '"', '');
+    fclose($handle);
+
+    $service = new \NexaPressImportExport\Import\ImportService();
+    $preview = $service->preview($path, 'csv');
+    check($preview['options']['conflict'] === 'skip', 'Unexpected CSV conflict default');
+    check($preview['summary']['counts']['posts']['add'] === 1, 'CSV post plan is absent');
+    check((new \NexaPressImportExport\Repository\ImportRepository())->find('posts', 'csv-example') === null, 'CSV preview wrote a post');
+
+    $result = $service->confirm($preview['id']);
+    check($result['posts'] === 1 && $result['pages'] === 1 && $result['categories'] === 1, 'CSV rows not imported');
+    $lookup = new \NexaPressImportExport\Repository\ImportRepository();
+    $post = $lookup->find('posts', 'csv-example');
+    check($post['status'] === 'draft' && $post['content'] === $body, 'CSV draft or multiline body changed');
+
+    $response = (new \NexaPressImportExport\Export\ExportService())->create('csv');
+    $rows = \NexaPressImportExport\Support\CsvReader::rows($response['path'], 20971520, 1001, 8);
+    $found = false;
+    foreach ($rows as $row) {
+        if (($row[2] ?? '') === 'csv-example') {
+            $found = true;
+            check($row[1] === '~=1+1', 'Spreadsheet-facing value can be interpreted as a formula');
+        }
+    }
+    check($found, 'CSV export omitted the post');
+    $documents = \NexaPressImportExport\Support\CsvContent::read($response['path'], []);
+    $posts = array_column($documents['posts'], null, 'slug');
+    $pages = array_column($documents['pages'], null, 'slug');
+    check($posts['csv-example']['title'] === '=1+1' && $posts['csv-example']['content'] === $body, 'CSV did not restore original text');
+    check($pages['csv-fixed-page']['title'] === '~そのまま', 'CSV did not restore a literal escape prefix');
+    \NexaPressImportExport\Support\TempDirectory::remove(dirname($response['path']));
+
+    $repeated = $service->preview($path, 'csv');
+    check($repeated['summary']['counts']['posts']['skip'] === 1, 'Duplicate CSV post did not skip');
+    check($service->confirm($repeated['id'])['posts'] === 0, 'Skipped CSV post was written');
+    rejects(fn() => $service->confirm($preview['id']), '見つかりません');
+    (new \NexaPressImportExport\Import\BackupService())->restore($result['backup_id'], 1);
+    check($lookup->find('posts', 'csv-example') === null, 'CSV import backup did not restore');
+});
+
+test('CSV checks byte and column limits and preserves published overwrite metadata', function () {
+    global $root;
+    $path = $root . '/boundary.csv';
+    $write = static function (string $body) use ($path): void {
+        $handle = fopen($path, 'wb');
+        fputcsv($handle, ['type', 'title', 'slug', 'content'], ',', '"', '');
+        fputcsv($handle, ['post', 'Boundary', 'csv-boundary', $body], ',', '"', '');
+        fclose($handle);
+    };
+
+    $limit = \app\Core\ArticleContent::MAX_BYTES;
+    $body = str_repeat('あ', intdiv($limit, 3));
+    $write($body);
+    $service = new \NexaPressImportExport\Import\ImportService();
+    $first = $service->preview($path, 'csv');
+    $service->confirm($first['id']);
+    $database = \app\Core\Database::connect();
+    $database->exec("UPDATE posts SET status = 'published', user_id = 7, published_at = '2026-11-01 00:00:00' WHERE slug = 'csv-boundary'");
+    $write('<p>updated</p>');
+    $preview = $service->preview($path, 'csv', ['conflict' => 'overwrite']);
+    check($preview['summary']['items'][0]['replaces_published'] === true, 'CSV preview omitted the public overwrite');
+    $service->confirm($preview['id']);
+    $lookup = new \NexaPressImportExport\Repository\ImportRepository();
+    $record = $lookup->find('posts', 'csv-boundary');
+    check($record['content'] === '<p>updated</p>' && $record['status'] === 'published' &&
+        (int)$record['user_id'] === 7 && $record['published_at'] === '2026-11-01 00:00:00', 'CSV overwrite changed published metadata');
+
+    $write($body . 'x');
+    rejects(fn() => $service->preview($path, 'csv', ['conflict' => 'overwrite']), '6,553,500');
+    file_put_contents($path, "type,title,slug,content\npost,name,key,\"unclosed");
+    rejects(fn() => $service->preview($path, 'csv'), '閉じられていません');
+    file_put_contents($path, "type,title,slug,content\n" . str_repeat(',', 8));
+    rejects(fn() => $service->preview($path, 'csv'), '列数が上限');
+    check($lookup->find('posts', 'csv-boundary')['content'] === '<p>updated</p>', 'Invalid CSV changed the published post');
+});

@@ -217,11 +217,26 @@
         updateOptions();
     }
 
+    const exportForm = root.querySelector('form[action$="/export"]');
+    if (exportForm) {
+        const csvScope = exportForm.querySelector("[data-nx-csv-scope]");
+        if (csvScope) {
+            const updateCsvScope = () => {
+                const csv = exportForm.querySelector('input[name="mode"]:checked')?.value === "csv";
+                csvScope.hidden = !csv;
+                csvScope.querySelector("select").disabled = !csv;
+            };
+            exportForm.addEventListener("change", updateCsvScope);
+            updateCsvScope();
+        }
+    }
+
     /*
-     * 二重送信を防止
+     * データを更新するフォームの二重送信を防止
      */
     root.querySelectorAll("form").forEach(
         (form) => {
+            if (form === exportForm) { return; }
             form.addEventListener(
                 "submit",
                 (event) => {

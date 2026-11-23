@@ -19,8 +19,7 @@ $inputIdPrefix = 'nx-export-mode';
         <h2>エクスポート</h2>
 
         <p>
-            選択したデータをZIPファイルとして
-            ダウンロードします。
+            選択したデータをCSVまたはZIPでダウンロードします。
         </p>
     </div>
 
@@ -56,6 +55,15 @@ $inputIdPrefix = 'nx-export-mode';
             }
             ?>
         </fieldset>
+
+        <div class="nx-import-export-field" data-nx-csv-scope>
+            <label for="nx-csv-scope">CSVの出力対象</label>
+            <select id="nx-csv-scope" name="csv_scope">
+                <option value="all">投稿と固定ページ</option>
+                <option value="post">投稿のみ</option>
+                <option value="page">固定ページのみ</option>
+            </select>
+        </div>
 
         <div class="nx-import-export-warning">
             <strong>エクスポート対象外</strong>

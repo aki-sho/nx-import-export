@@ -7,6 +7,7 @@ use app\Core\Database;
 use NexaPressImportExport\Package\PackageReader;
 use NexaPressImportExport\Repository\SettingsRepository;
 use NexaPressImportExport\Repository\ImportRepository;
+use NexaPressImportExport\Support\CsvContent;
 use NexaPressImportExport\Support\Json;
 use NexaPressImportExport\Support\Limits;
 use NexaPressImportExport\Support\OperationLock;
@@ -23,10 +24,10 @@ class ImportService
         $package = null;
         try {
             $userId = $this->userId();
-            $options = ImportOptions::normalize($options);
-            $package = $reader->read($zipPath, $mode);
+            $options = $this->options($mode, $options);
+            $source = $this->source($reader, $zipPath, $mode, $package);
             $planner = new ImportPlanner();
-            $plan = $planner->prepare($package['directory'], $mode, $userId, Limits::all(), $options);
+            $plan = $planner->prepare($source, $mode, $userId, Limits::all(), $options);
             $signature = $this->signature($plan);
             return (new PreviewStore())->save(
                 $zipPath, $mode, $options, $planner->summary($plan), $signature, $userId
@@ -46,12 +47,12 @@ class ImportService
             $userId = $this->userId();
             $store = new PreviewStore();
             $request = $store->get($token, $userId);
-            $package = $reader->read($store->packagePath($request), $request['mode']);
-            $plan = (new ImportPlanner())->prepare($package['directory'], $request['mode'], $userId, Limits::all(), $request['options']);
+            $source = $this->source($reader, $store->packagePath($request), $request['mode'], $package);
+            $plan = (new ImportPlanner())->prepare($source, $request['mode'], $userId, Limits::all(), $request['options']);
             if (!hash_equals($request['signature'], $this->signature($plan))) {
                 throw new RuntimeException('プレビュー後に変更対象のデータまたは重複状態が変わっています。再度プレビューしてください。');
             }
-            $result = $this->execute($package['directory'], $plan, $userId, $request['signature']);
+            $result = $this->execute($source, $plan, $userId, $request['signature']);
             try { PrivateStorage::remove('previews', $token); }
             catch (Throwable $exception) { $result['warning'] = '取り込みは完了しましたが、プレビューの一時ファイルを削除できませんでした。'; }
             return $result;
@@ -73,13 +74,30 @@ class ImportService
         try {
             $userId = $this->userId();
             $options['import_debug'] = $importDebug;
-            $package = $reader->read($zipPath, $mode);
-            $plan = (new ImportPlanner())->prepare($package['directory'], $mode, $userId, Limits::all(), ImportOptions::normalize($options));
-            return $this->execute($package['directory'], $plan, $userId);
+            $source = $this->source($reader, $zipPath, $mode, $package);
+            $plan = (new ImportPlanner())->prepare($source, $mode, $userId, Limits::all(), $this->options($mode, $options));
+            return $this->execute($source, $plan, $userId);
         } finally {
             try { if ($package !== null) { $reader->release($package); } }
             finally { $lock->release(); }
         }
+    }
+
+    private function source(PackageReader $reader, string $file, string $mode, ?array &$package): string
+    {
+        if ($mode === CsvContent::MODE) {
+            return $file;
+        }
+        $package = $reader->read($file, $mode);
+        return $package['directory'];
+    }
+
+    private function options(string $mode, array $options): array
+    {
+        if ($mode === CsvContent::MODE) {
+            $options += ['conflict' => 'skip'];
+        }
+        return ImportOptions::normalize($options);
     }
 
     private function execute(string $directory, array $plan, int $userId, ?string $expectedSignature = null): array

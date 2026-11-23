@@ -2,8 +2,10 @@
 
 namespace NexaPressImportExport\Import;
 
-use app\Core\HtmlSanitizer;
+use app\Core\ArticleContent;
 use DateTimeImmutable;
+use InvalidArgumentException;
+use NexaPressImportExport\Support\CsvContent;
 use NexaPressImportExport\Repository\ContentRepository;
 use NexaPressImportExport\Repository\ImportRepository;
 use NexaPressImportExport\Support\Json;
@@ -15,7 +17,7 @@ class ContentImporter
     /*
      * コンテンツを取り込む
      */
-    private const MAX_TEXT_BYTES = 65535;
+    private const MAX_EXCERPT_BYTES = 65535;
     private string $importedAt = '';
 
     public function import(
@@ -37,21 +39,44 @@ class ContentImporter
         array $options = [],
         ?UrlRewriter $rewriter = null
     ): array {
-        if ($userId <= 0) { throw new RuntimeException('投稿の所有者を確認できません。'); }
-        $options = ImportOptions::normalize($options);
-        $this->importedAt = $options['imported_at'];
-        $rewriter = $rewriter ?? new UrlRewriter($options);
         $types = ['categories' => 'カテゴリー', 'posts' => '投稿', 'pages' => '固定ページ'];
         $documents = [];
         foreach ($types as $type => $label) {
             $document = Json::read(rtrim($packageDirectory, '/\\') . '/data/' . $type . '.json', (int)($limits['max_json_size'] ?? 20971520));
             $documents[$type] = $this->items($document, $label);
         }
+        return $this->prepareDocuments($documents, $userId, $limits, $options, $rewriter, false);
+    }
+
+    public function prepareCsv(
+        string $path,
+        int $userId,
+        array $limits,
+        array $options,
+        UrlRewriter $rewriter
+    ): array {
+        return $this->prepareDocuments(CsvContent::read($path, $limits), $userId, $limits, $options, $rewriter, true);
+    }
+
+    private function prepareDocuments(
+        array $documents,
+        int $userId,
+        array $limits,
+        array $options,
+        ?UrlRewriter $rewriter,
+        bool $csv
+    ): array {
+        if ($userId <= 0) { throw new RuntimeException('投稿の所有者を確認できません。'); }
+        $options = ImportOptions::normalize($options);
+        $this->importedAt = $options['imported_at'];
+        $rewriter = $rewriter ?? new UrlRewriter($options);
+        $types = ['categories' => 'カテゴリー', 'posts' => '投稿', 'pages' => '固定ページ'];
         $maxItems = (int)($limits['max_content_items'] ?? 10000);
         if ($maxItems <= 0 || array_sum(array_map('count', $documents)) > $maxItems) {
             throw new RuntimeException('コンテンツの合計件数が制限を超えています。');
         }
         $resolver = new ConflictResolver();
+        $lookup = new ImportRepository();
         foreach ($types as $type => $label) {
             $slugs = [];
             foreach ($documents[$type] as $item) {
@@ -64,13 +89,18 @@ class ContentImporter
         }
         $plan = ['categories' => [], 'posts' => [], 'pages' => []];
         $categoryIds = [];
+        $existingCategoryIds = [];
         foreach ($documents['categories'] as $category) {
             $oldId = (int)($category['id'] ?? 0);
             if ($oldId <= 0 || isset($categoryIds[$oldId])) { throw new RuntimeException('カテゴリーIDが正しくないか重複しています。'); }
             $categoryIds[$oldId] = true;
             $slug = $this->requiredString($category['slug'], 'カテゴリースラッグ');
-            $entry = $resolver->resolve('categories', $slug, $options['conflict']);
+            $entry = $resolver->resolve('categories', $slug, $csv ? 'skip' : $options['conflict']);
             $created = $this->date($category['created_at'] ?? null);
+            if ($csv && $entry['action'] === 'skip') {
+                $entry['existing_id'] = (int)($lookup->find('categories', $entry['key'])['id'] ?? 0);
+                $existingCategoryIds[$oldId] = $entry['existing_id'];
+            }
             $entry['source_id'] = $oldId;
             $entry['data'] = [
                 'name' => $this->requiredString($category['name'] ?? '', 'カテゴリー名', 100),
@@ -85,23 +115,38 @@ class ContentImporter
                 $title = $this->requiredString($item['title'] ?? '', $types[$type] . 'タイトル');
                 $slug = $this->requiredString($item['slug'], $types[$type] . 'スラッグ');
                 $entry = $resolver->resolve($type, $slug, $options['conflict']);
-                $created = $this->date($item['created_at'] ?? null);
-                $status = $this->status($item['status'] ?? 'draft');
-                $content = $item['content'] ?? '';
-                if (!is_string($content) || strlen($content) > self::MAX_TEXT_BYTES) {
-                    throw new RuntimeException('本文の形式または容量が正しくありません。');
+                $reserved = ['admin', 'install', 'public', 'posts', 'search', 'category'];
+                if ($type === 'pages') {
+                    $reserved = array_merge($reserved, ['page', 'post']);
                 }
-                if ($entry['action'] !== 'skip') {
-                    $content = HtmlSanitizer::sanitize($rewriter->rewrite($content, $types[$type] . '：' . $title));
-                    if (strlen($content) > self::MAX_TEXT_BYTES) {
-                        throw new RuntimeException('URL置換とHTML検査後の本文が保存できる容量を超えています。');
+                if ($csv && $entry['action'] === 'add' && in_array(strtolower($entry['key']), $reserved, true)) {
+                    throw new RuntimeException('CSVの' . $item['csv_row'] . '行目のスラッグはシステムで使用されています。');
+                }
+                $existing = $csv && $entry['action'] === 'update' ? $lookup->find($type, $entry['key']) : null;
+                if ($existing !== null) {
+                    $entry['replaces_published'] = $existing['status'] === 'published' && empty($existing['deleted_at']);
+                    if ((int)($existing['user_id'] ?? 0) > 0) {
+                        $entry['owner_id'] = (int)$existing['user_id'];
                     }
+                }
+                $created = $this->date($existing['created_at'] ?? $item['created_at'] ?? null);
+                $status = $this->status($existing['status'] ?? $item['status'] ?? 'draft');
+                $content = $item['content'] ?? '';
+                $label = isset($item['csv_row']) && $csv ? 'CSVの' . (int)$item['csv_row'] . '行目。' : '';
+                try {
+                    ArticleContent::validate($content);
+                    if ($entry['action'] !== 'skip') {
+                        $content = ArticleContent::sanitize($rewriter->rewrite($content, $types[$type] . '：' . $title));
+                    }
+                } catch (InvalidArgumentException $exception) {
+                    throw new RuntimeException($label . $exception->getMessage(), 0, $exception);
                 }
                 $entry['data'] = [
                     'title' => $title, 'slug' => $entry['key'], 'content' => $content,
                     'status' => $status, 'created_at' => $created,
-                    'updated_at' => $this->date($item['updated_at'] ?? null, $created),
-                    'published_at' => $status === 'published' ? $this->date($item['published_at'] ?? null, $created) : null,
+                    'updated_at' => $this->date($item['updated_at'] ?? null, $csv ? $this->importedAt : $created),
+                    'published_at' => $status === 'published'
+                        ? $this->date($existing['published_at'] ?? $item['published_at'] ?? null, $created) : null,
                 ];
                 if ($type === 'posts') {
                     $categoryId = (int)($item['category_id'] ?? 0);
@@ -109,9 +154,19 @@ class ContentImporter
                         throw new RuntimeException('投稿から参照されたカテゴリーがパッケージにありません。');
                     }
                     $entry['category_id'] = $categoryId > 0 ? $categoryId : null;
+                    if ($existing !== null) {
+                        $existingCategory = (int)($existing['category_id'] ?? 0);
+                        if (array_key_exists('category_slug', $item)) {
+                            $entry['category_changed'] = $categoryId > 0
+                                ? ($existingCategoryIds[$categoryId] ?? -1) !== $existingCategory
+                                : $existingCategory !== 0;
+                        } elseif ($existingCategory > 0) {
+                            $entry['retain_category_id'] = $existingCategory;
+                        }
+                    }
                     if (array_key_exists('excerpt', $item)) {
                         $excerpt = $item['excerpt'] ?? '';
-                        if (!is_string($excerpt) || strlen($excerpt) > self::MAX_TEXT_BYTES) {
+                        if (!is_string($excerpt) || strlen($excerpt) > self::MAX_EXCERPT_BYTES) {
                             throw new RuntimeException('投稿の抜粋の形式または長さが正しくありません。');
                         }
                         $entry['data']['excerpt'] = $excerpt;
@@ -127,6 +182,18 @@ class ContentImporter
                 $plan[$type][] = $entry;
             }
         }
+        if ($csv) {
+            $used = [];
+            foreach ($plan['posts'] as $post) {
+                if ($post['action'] !== 'skip' && $post['category_id'] !== null) {
+                    $used[$post['category_id']] = true;
+                }
+            }
+            $plan['categories'] = array_values(array_filter(
+                $plan['categories'],
+                static fn(array $entry): bool => isset($used[$entry['source_id']])
+            ));
+        }
         return $plan;
     }
 
@@ -139,7 +206,9 @@ class ContentImporter
         foreach ($plan['categories'] as $entry) {
             if ($entry['action'] === 'skip') {
                 $existing = $lookup->find('categories', $entry['key']);
-                if ($existing === null) { throw new RuntimeException('既存のカテゴリーが変更されています。'); }
+                if ($existing === null || (isset($entry['existing_id']) && (int)$existing['id'] !== $entry['existing_id'])) {
+                    throw new RuntimeException('既存のカテゴリーが変更されています。');
+                }
                 $id = (int)$existing['id'];
             } else {
                 $id = $repository->saveCategory($entry['data'], $entry['action'] === 'update');
@@ -150,8 +219,11 @@ class ContentImporter
         foreach (['posts', 'pages'] as $type) {
             foreach ($plan[$type] as $entry) {
                 if ($entry['action'] === 'skip') { continue; }
+                $ownerId = $entry['owner_id'] ?? $userId;
                 if ($type === 'posts') {
-                    $categoryId = $entry['category_id'] === null ? null : $categoryIdMap[$entry['category_id']];
+                    $categoryId = $entry['category_id'] === null
+                        ? ($entry['retain_category_id'] ?? null)
+                        : $categoryIdMap[$entry['category_id']];
                     $data = $entry['data'];
                     if (array_key_exists('featured_media_path', $data)) {
                         $path = $data['featured_media_path'];
@@ -164,8 +236,8 @@ class ContentImporter
                             }
                         }
                     }
-                    $repository->savePost($data, $userId, $categoryId, $entry['action'] === 'update');
-                } else { $repository->savePage($entry['data'], $userId, $entry['action'] === 'update'); }
+                    $repository->savePost($data, $ownerId, $categoryId, $entry['action'] === 'update');
+                } else { $repository->savePage($entry['data'], $ownerId, $entry['action'] === 'update'); }
                 $result[$type]++;
             }
         }

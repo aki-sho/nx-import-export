@@ -5,6 +5,8 @@ namespace NexaPressImportExport\Admin;
 use app\Core\Auth;
 use app\Core\Csrf;
 use app\Core\Permission;
+use app\Core\RequestSize;
+use NexaPressImportExport\Support\CsvContent;
 use NexaPressImportExport\Import\BackupService;
 use NexaPressImportExport\Import\ImportOptions;
 use NexaPressImportExport\Import\ImportService;
@@ -24,18 +26,22 @@ class ImportController
             if (($_FILES['import_file']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE && isset($_POST['preview_token'])) {
                 $store = new PreviewStore();
                 $existing = $store->get($this->identifier('preview_token'), $this->userId());
-                $zipPath = $store->packagePath($existing);
+                if (($mode === CsvContent::MODE) !== ($existing['mode'] === CsvContent::MODE)) {
+                    throw new RuntimeException('形式を変更する場合は、新しいファイルを選択してください。');
+                }
+                $path = $store->packagePath($existing);
             } else {
-                $upload = ImportValidator::upload($_FILES['import_file'] ?? null, Limits::all());
-                $zipPath = $upload['tmp_name'];
+                $upload = ImportValidator::upload($_FILES['import_file'] ?? null, Limits::all(), $mode);
+                $path = $upload['tmp_name'];
             }
+            $conflict = $_POST['conflict'] ?? '';
             $options = ImportOptions::normalize([
-                'conflict' => $_POST['conflict'] ?? 'overwrite',
+                'conflict' => $conflict === '' ? ($mode === CsvContent::MODE ? 'skip' : 'overwrite') : $conflict,
                 'url_from' => $_POST['url_from'] ?? '',
                 'url_to' => $_POST['url_to'] ?? '',
                 'import_debug' => ($_POST['import_debug'] ?? '') === '1',
             ]);
-            $preview = (new ImportService())->preview($zipPath, $mode, $options);
+            $preview = (new ImportService())->preview($path, $mode, $options);
             $_SESSION['nx_import_export_preview'] = $preview['id'];
             Notice::success('プレビューを作成しました。変更内容を確認してから実行してください。');
         });
@@ -79,6 +85,9 @@ class ImportController
     private function handle(callable $action): void
     {
         Permission::require('extensions.manage');
+        if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+            RequestSize::requirePostWithinLimit();
+        }
         Csrf::requireValid($_POST['_csrf_token'] ?? null);
         try { $action(); }
         catch (Throwable $exception) {

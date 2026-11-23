@@ -16,6 +16,30 @@ namespace app\Core {
         public static function sanitize(?string $html): string { return trim((string)$html); }
     }
 
+    class ArticleContent
+    {
+        public const MAX_BYTES = 6553500;
+
+        public static function validate(mixed $content): void
+        {
+            if (!is_string($content) || strlen($content) > self::MAX_BYTES) {
+                throw new \InvalidArgumentException('本文の形式または容量が正しくありません。');
+            }
+        }
+
+        public static function sanitize(mixed $content): string
+        {
+            self::validate($content);
+            return HtmlSanitizer::sanitize($content);
+        }
+    }
+
+    class RequestSize
+    {
+        public static function phpLimit(string $setting): ?int { return null; }
+        public static function requirePostWithinLimit(): void {}
+    }
+
     class Database
     {
         private static ?\PDO $connection = null;

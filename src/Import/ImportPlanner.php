@@ -4,6 +4,7 @@ namespace NexaPressImportExport\Import;
 
 use NexaPressImportExport\Repository\ImportRepository;
 use NexaPressImportExport\Repository\SettingsRepository;
+use NexaPressImportExport\Support\CsvContent;
 use NexaPressImportExport\Validation\ExportValidator;
 use RuntimeException;
 
@@ -29,7 +30,10 @@ class ImportPlanner
         }
         $rewriter = new UrlRewriter($options, $paths);
         if (!empty($modes[$mode]['content'])) {
-            $plan['content'] = (new ContentImporter())->prepare($directory, $userId, $limits, $options, $rewriter);
+            $importer = new ContentImporter();
+            $plan['content'] = $mode === CsvContent::MODE
+                ? $importer->prepareCsv($directory, $userId, $limits, $options, $rewriter)
+                : $importer->prepare($directory, $userId, $limits, $options, $rewriter);
         }
         if (!empty($modes[$mode]['settings'])) {
             $plan['settings'] = (new SettingsImporter())->prepare($directory, $limits, $options['import_debug'], $rewriter);
@@ -77,12 +81,14 @@ class ImportPlanner
                         foreach ($entry['data'] as $field => $value) {
                             if ($field !== 'created_at' && array_key_exists($field, $before) && (string)$before[$field] !== (string)$value) { $changed[] = $field; }
                         }
-                        if (isset($before['user_id']) && (int)$before['user_id'] !== $plan['user_id']) { $changed[] = 'owner'; }
+                        if (!empty($entry['category_changed'])) { $changed[] = 'category_id'; }
+                        if (isset($before['user_id']) && (int)$before['user_id'] !== ($entry['owner_id'] ?? $plan['user_id'])) { $changed[] = 'owner'; }
                     }
                     $summary['items'][] = [
                         'type' => $type, 'source' => $entry['source_key'], 'target' => $entry['key'],
                         'title' => $entry['data']['title'] ?? $entry['data']['name'] ?? basename($entry['key']),
                         'action' => $entry['action'], 'conflict' => $entry['conflict'], 'changed' => $changed,
+                        'replaces_published' => $entry['replaces_published'] ?? false,
                     ];
                 } else { $summary['omitted']++; }
             }

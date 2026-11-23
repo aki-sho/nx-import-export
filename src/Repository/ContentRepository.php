@@ -47,6 +47,34 @@ class ContentRepository
         );
     }
 
+    public function csvRows(string $type): \Generator
+    {
+        $pdo = Database::connect();
+        if ($type === 'post') {
+            $posts = Database::table('posts');
+            $categories = Database::table('categories');
+            $statement = $pdo->prepare("SELECT p.id, p.title, p.slug, p.content, p.excerpt,
+                    c.slug AS category_slug, c.name AS category_name
+                FROM {$posts} p LEFT JOIN {$categories} c ON p.category_id = c.id
+                WHERE p.deleted_at IS NULL AND p.id > ? ORDER BY p.id LIMIT 4");
+        } else {
+            $pages = Database::table('pages');
+            $statement = $pdo->prepare("SELECT id, title, slug, content FROM {$pages}
+                WHERE deleted_at IS NULL AND id > ? ORDER BY id LIMIT 4");
+        }
+        $lastId = 0;
+        do {
+            $statement->execute([$lastId]);
+            $count = 0;
+            while (($row = $statement->fetch()) !== false) {
+                $lastId = (int)$row['id'];
+                $count++;
+                yield $row;
+            }
+            $statement->closeCursor();
+        } while ($count === 4);
+    }
+
     /*
      * カテゴリーを追加または更新
      */

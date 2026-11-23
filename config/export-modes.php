@@ -4,6 +4,14 @@
  * エクスポート・インポートの処理モード
  */
 return [
+    'csv' => [
+        'label' => 'CSV（投稿・固定ページ）',
+        'description' => '本文、タイトル、スラッグ、投稿のカテゴリなどを対象にします。',
+        'content' => true,
+        'media' => false,
+        'settings' => false,
+    ],
+
     /*
      * 投稿・固定ページ・カテゴリー
      */

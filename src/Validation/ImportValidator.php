@@ -2,6 +2,7 @@
 
 namespace NexaPressImportExport\Validation;
 
+use NexaPressImportExport\Support\CsvContent;
 use RuntimeException;
 
 class ImportValidator
@@ -18,11 +19,12 @@ class ImportValidator
     }
 
     /*
-     * アップロードされたZIPを確認
+     * アップロードされたファイルを確認
      */
     public static function upload(
         mixed $file,
-        array $limits
+        array $limits,
+        string $mode = 'content'
     ): array {
         if (!is_array($file)) {
             throw new RuntimeException(
@@ -76,6 +78,18 @@ class ImportValidator
                 PATHINFO_EXTENSION
             )
         );
+
+        if ($mode === CsvContent::MODE) {
+            if ($extension !== 'csv' || !is_uploaded_file($temporaryName)) {
+                throw new RuntimeException('CSV形式のファイルを選択してください。');
+            }
+            $limit = CsvContent::uploadLimit($limits);
+            $size = filesize($temporaryName);
+            if ($size === false || $size <= 0 || $size > $limit) {
+                throw new RuntimeException('CSVファイルは' . number_format($limit) . 'バイト以内です。');
+            }
+            return ['name' => $originalName, 'tmp_name' => $temporaryName, 'size' => $size];
+        }
 
         if ($extension !== 'zip') {
             throw new RuntimeException(
@@ -156,7 +170,7 @@ class ImportValidator
         return match ($error) {
             UPLOAD_ERR_INI_SIZE,
             UPLOAD_ERR_FORM_SIZE =>
-                'インポートファイルの容量が大きすぎます。',
+                'ファイルがPHPのアップロード上限を超えています。',
 
             UPLOAD_ERR_PARTIAL =>
                 'ファイルのアップロードが完了しませんでした。',

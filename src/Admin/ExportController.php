@@ -5,6 +5,7 @@ namespace NexaPressImportExport\Admin;
 use app\Core\Csrf;
 use app\Core\Permission;
 use NexaPressImportExport\Export\ExportService;
+use NexaPressImportExport\Support\CsvContent;
 use NexaPressImportExport\Support\TempDirectory;
 use NexaPressImportExport\Validation\ExportValidator;
 use RuntimeException;
@@ -47,7 +48,8 @@ class ExportController
             $service = new ExportService();
 
             $package = $service->create(
-                $mode
+                $mode,
+                is_string($_POST['csv_scope'] ?? null) ? $_POST['csv_scope'] : 'all'
             );
 
             $packagePath = (string)(
@@ -112,12 +114,9 @@ class ExportController
                 ob_end_clean();
             }
 
-            /*
-             * ZIPファイルとしてダウンロード
-             */
-            header(
-                'Content-Type: application/zip'
-            );
+            header($mode === CsvContent::MODE
+                ? 'Content-Type: text/csv; charset=UTF-8'
+                : 'Content-Type: application/zip');
 
             header(
                 'Content-Disposition: attachment; filename="'
